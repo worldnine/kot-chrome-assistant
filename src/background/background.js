@@ -4,13 +4,22 @@ const postRequest = (endpoint, headers, body, sendResponse) => {
     'headers': headers,
     'body': body
   })
-    .then((res) => res.json())
     .then((res) => {
-      if (res && res.ok) {
-        sendResponse({ 'status': 'success' });
+      if (res.ok) {
+        return res.json().then((json) => {
+          // Slack APIはレスポンスbody内の ok フィールドで成否を返す
+          if (json && json.ok === false) {
+            console.error(JSON.stringify(json));
+            sendResponse({ 'status': 'failed' });
+          } else {
+            sendResponse({ 'status': 'success' });
+          }
+        });
       } else {
-        console.error(JSON.stringify(res));
-        sendResponse({ 'status': 'failed' });
+        return res.text().then((text) => {
+          console.error('HTTP ' + res.status + ': ' + text);
+          sendResponse({ 'status': 'failed' });
+        });
       }
     })
     .catch((err) => {
@@ -24,6 +33,7 @@ const validateEndpoint = (endpoint) => {
     'https://slack.com/api/chat.postMessage',
     'https://slack.com/api/users.profile.set',
     'https://hooks.slack.com/services/',
+    'https://chat.googleapis.com/v1/spaces/',
   ]
   return whitelist.some((l) => endpoint.startsWith(l));
 };

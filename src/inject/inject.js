@@ -14,7 +14,7 @@
 
   let debuggable = false;
 
-  // Message
+  // Slack Message
   let slackEnabled = false,
       slackChannel = '',
       slackClockInMessage = '',
@@ -25,7 +25,7 @@
       slackToken = '',
       slackWebHooksUrl = '';
 
-  // Status
+  // Slack Status
   let slackStatusEnabled = false,
       slackClockInStatusEmoji = '',
       slackClockInStatusText = '',
@@ -35,6 +35,14 @@
       slackTakeABreakStatusText = '',
       slackStatusToken = '';
 
+  // Google Chat
+  let googleChatEnabled = false,
+      googleChatWebhooksUrl = '',
+      googleChatClockInMessage = '',
+      googleChatClockOutMessage = '',
+      googleChatTakeABreakMessage = '',
+      googleChatBreakIsOverMessage = '';
+
   const now = new Date(),
       today = [now.getFullYear(), now.getMonth() + 1, now.getDate()].map(d => d.toString().padStart(2, '0')).join(''),
       todayHistoryItem = localStorage.getItem('PARSONAL_BROWSER_RECORDER@RECORD_HISTORY_' + setting.user.user_token),
@@ -43,64 +51,11 @@
       isClockedOut = todayHistories.some(h=>h.name === '退勤'),
       isBreakStart = todayHistories[0]?.name === '休始';
 
-  let intervalCount = 0;
-  const interval = setInterval(() => {
-    const clockInButton = document.querySelector('.record-clock-in'),
-          clockOutButton = document.querySelector('.record-clock-out'),
-          breakStartButton = [...document.querySelectorAll(".record-btn-inner")].filter(v=>v.textContent==="休始")[0],
-          breakFinishButton = [...document.querySelectorAll(".record-btn-inner")].filter(v=>v.textContent==="休終")[0];
-
-    if (!(clockInButton && clockOutButton)) {
-      if (++intervalCount > 30) {
-        clearInterval(interval);
-      }
-      return;
-    }
-
-    clearInterval(interval);
-
-    if (isClockedIn) clockInButton.style.opacity = 0.3;
-    if (isClockedOut) clockOutButton.style.opacity = 0.3;
-
-    if (breakStartButton && breakFinishButton) {
-      if (isBreakStart) clockOutButton.style.opacity = 0.3;
-      if (!isClockedIn || isClockedOut || (isClockedIn && isBreakStart) ) breakStartButton.style.opacity = 0.3;
-      if (!isBreakStart) breakFinishButton.style.opacity = 0.3;
-    }
-
-    const buttons = setting.timerecorder.record_button,
-          clockInButtonId = buttons.filter(b => b.mark === '1')[0].id,
-          clockOutButtonId = buttons.filter(b => b.mark === '2')[0].id,
-          breakButtons = buttons.filter(b => b.mark === '0');
-
-    if (slackEnabled || slackStatusEnabled) {
-      document.getElementById('record_' + clockInButtonId).addEventListener('click', clockIn, false);
-      document.getElementById('record_' + clockOutButtonId).addEventListener('click', clockOut, false);
-      console.log('Content Scripts is injected by KoT Chrome Assistant.');
-
-      if (debuggable) {
-        document.querySelector('footer').innerHTML = '<button id="testClockIn">出勤テスト</button><button id="testClockOut">退勤テスト</button><button id="testTakeABreak">休始テスト</button><button id="testBreakIsOver">休終テスト</button>'
-        document.getElementById('testClockIn').addEventListener('click', clockIn, false);
-        document.getElementById('testClockOut').addEventListener('click', clockOut, false);
-      }
-
-      if (breakButtons[0]) {
-        const takeABreakButtonId = breakButtons[0].id,
-              breakIsOverButtonId = breakButtons[1].id;
-        document.getElementById('record_' + takeABreakButtonId).addEventListener('click', takeABreak, false);
-        document.getElementById('record_' + breakIsOverButtonId).addEventListener('click', breakIsOver, false);
-        if (debuggable) {
-          document.getElementById('testTakeABreak').addEventListener('click', takeABreak, false);
-          document.getElementById('testBreakIsOver').addEventListener('click', breakIsOver, false);
-        }
-      }
-    }
-  }, 100);
-
+  // 設定値の読み込みが完了してからボタン検出・ハンドラ登録を行う
   chrome.storage.sync.get([
     "debuggable",
 
-    // Message
+    // Slack Message
     "slackEnabled",
     "slackChannel",
     "slackClockInMessage",
@@ -111,7 +66,7 @@
     "slackToken",
     "slackWebHooksUrl",
 
-    // Status
+    // Slack Status
     "slackStatusEnabled",
     "slackClockInStatusEmoji",
     "slackClockInStatusText",
@@ -119,11 +74,19 @@
     "slackClockOutStatusText",
     "slackTakeABreakStatusEmoji",
     "slackTakeABreakStatusText",
-    "slackStatusToken"
+    "slackStatusToken",
+
+    // Google Chat
+    "googleChatEnabled",
+    "googleChatWebhooksUrl",
+    "googleChatClockInMessage",
+    "googleChatClockOutMessage",
+    "googleChatTakeABreakMessage",
+    "googleChatBreakIsOverMessage"
   ], (items) => {
     debuggable = items.debuggable;
 
-    // Message
+    // Slack Message
     slackEnabled = items.slackEnabled;
     slackChannel = items.slackChannel;
     slackClockInMessage = items.slackClockInMessage;
@@ -133,7 +96,7 @@
     slackToken = items.slackToken;
     slackWebhooksUrl = items.slackWebhooksUrl;
 
-    // Status
+    // Slack Status
     slackStatusEnabled = items.slackStatusEnabled;
     slackClockInStatusEmoji = items.slackClockInStatusEmoji;
     slackClockInStatusText = items.slackClockInStatusText;
@@ -142,29 +105,96 @@
     slackTakeABreakStatusEmoji = items.slackTakeABreakStatusEmoji;
     slackTakeABreakStatusText = items.slackTakeABreakStatusText;
     slackStatusToken = items.slackStatusToken;
+
+    // Google Chat
+    googleChatEnabled = items.googleChatEnabled;
+    googleChatWebhooksUrl = items.googleChatWebhooksUrl;
+    googleChatClockInMessage = items.googleChatClockInMessage;
+    googleChatClockOutMessage = items.googleChatClockOutMessage;
+    googleChatTakeABreakMessage = items.googleChatTakeABreakMessage;
+    googleChatBreakIsOverMessage = items.googleChatBreakIsOverMessage;
+
+    // 設定読み込み完了後にボタン待ちループを開始
+    let intervalCount = 0;
+    const interval = setInterval(() => {
+      const clockInButton = document.querySelector('.record-clock-in'),
+            clockOutButton = document.querySelector('.record-clock-out'),
+            breakStartButton = [...document.querySelectorAll(".record-btn-inner")].filter(v=>v.textContent==="休始")[0],
+            breakFinishButton = [...document.querySelectorAll(".record-btn-inner")].filter(v=>v.textContent==="休終")[0];
+
+      if (!(clockInButton && clockOutButton)) {
+        if (++intervalCount > 30) {
+          clearInterval(interval);
+        }
+        return;
+      }
+
+      clearInterval(interval);
+
+      if (isClockedIn) clockInButton.style.opacity = 0.3;
+      if (isClockedOut) clockOutButton.style.opacity = 0.3;
+
+      if (breakStartButton && breakFinishButton) {
+        if (isBreakStart) clockOutButton.style.opacity = 0.3;
+        if (!isClockedIn || isClockedOut || (isClockedIn && isBreakStart) ) breakStartButton.style.opacity = 0.3;
+        if (!isBreakStart) breakFinishButton.style.opacity = 0.3;
+      }
+
+      const buttons = setting.timerecorder.record_button,
+            clockInButtonId = buttons.filter(b => b.mark === '1')[0].id,
+            clockOutButtonId = buttons.filter(b => b.mark === '2')[0].id,
+            breakButtons = buttons.filter(b => b.mark === '0');
+
+      if (slackEnabled || slackStatusEnabled || googleChatEnabled) {
+        document.getElementById('record_' + clockInButtonId).addEventListener('click', clockIn, false);
+        document.getElementById('record_' + clockOutButtonId).addEventListener('click', clockOut, false);
+        console.log('Content Scripts is injected by KoT Chrome Assistant.');
+
+        if (debuggable) {
+          document.querySelector('footer').innerHTML = '<button id="testClockIn">出勤テスト</button><button id="testClockOut">退勤テスト</button><button id="testTakeABreak">休始テスト</button><button id="testBreakIsOver">休終テスト</button>'
+          document.getElementById('testClockIn').addEventListener('click', clockIn, false);
+          document.getElementById('testClockOut').addEventListener('click', clockOut, false);
+        }
+
+        if (breakButtons[0]) {
+          const takeABreakButtonId = breakButtons[0].id,
+                breakIsOverButtonId = breakButtons[1].id;
+          document.getElementById('record_' + takeABreakButtonId).addEventListener('click', takeABreak, false);
+          document.getElementById('record_' + breakIsOverButtonId).addEventListener('click', breakIsOver, false);
+          if (debuggable) {
+            document.getElementById('testTakeABreak').addEventListener('click', takeABreak, false);
+            document.getElementById('testBreakIsOver').addEventListener('click', breakIsOver, false);
+          }
+        }
+      }
+    }, 100);
   });
 
   const clockIn = () => {
-    postMessage(slackClockInMessage);
+    postSlackMessage(slackClockInMessage);
+    postGoogleChatMessage(googleChatClockInMessage);
     changeStatus(CLOCK_IN)
   };
 
   const clockOut = () => {
-    postMessage(slackClockOutMessage);
+    postSlackMessage(slackClockOutMessage);
+    postGoogleChatMessage(googleChatClockOutMessage);
     changeStatus(CLOCK_OUT)
   };
 
   const takeABreak = () => {
-    postMessage(slackTakeABreakMessage);
+    postSlackMessage(slackTakeABreakMessage);
+    postGoogleChatMessage(googleChatTakeABreakMessage);
     changeStatus(TAKE_A_BREAK)
   };
 
   const breakIsOver = () => {
-    postMessage(slackBreakIsOverMessage);
+    postSlackMessage(slackBreakIsOverMessage);
+    postGoogleChatMessage(googleChatBreakIsOverMessage);
     changeStatus(BREAK_IS_OVER)
   };
 
-  const postMessage = (message) => {
+  const postSlackMessage = (message) => {
     if (!slackEnabled || !message || message.length === 0) return;
 
     if (slackApiType === 'asUser') {
@@ -207,6 +237,26 @@
           }
         );
        }
+    }
+  };
+
+  const postGoogleChatMessage = (message) => {
+    if (!googleChatEnabled || !message || message.length === 0) return;
+
+    const webhookUrls = googleChatWebhooksUrl.split(' ').filter(u => u.length > 0);
+    for (let i = 0; i < webhookUrls.length; i++) {
+      chrome.runtime.sendMessage(
+        {
+          contentScriptQuery: 'postMessage',
+          headers: {
+            'Content-Type': 'application/json; charset=utf-8',
+          },
+          body: JSON.stringify({
+            'text': message
+          }),
+          endpoint: webhookUrls[i],
+        }
+      );
     }
   };
 

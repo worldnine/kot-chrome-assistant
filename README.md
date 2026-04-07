@@ -13,6 +13,15 @@ https://chrome.google.com/webstore/detail/pifbdpooppfkllaiobkaoeocbfmpabaj/
 次のアクションを分かりやすくして、2重に出勤や退勤をしてしまう誤操作を予防します。
 ![Content Scripts](docs/images/content-scripts-clockout.png)
 
+## 出勤、退勤時のGoogle Chatメッセージ通知
+設定したGoogle ChatスペースのIncoming Webhookに対して、以下のようなメッセージが送られるようにできます。
+メッセージやWebhook URLはカスタマイズ可能です。複数のWebhook URLを指定して同時に通知することもできます。
+
+- 出勤ボタン押下時に「出社しました。」
+- 退勤ボタン押下時に「退社します。」
+
+※ Google Chatスペースで Incoming Webhook を発行して、オプション画面でWebhook URLを設定してください。
+
 ## 出勤、退勤時のSlackメッセージ通知
 設定したSlackチャンネルに対して、以下のようなメッセージが送られるようにできます。  
 メッセージやチャンネルはカスタマイズ可能です。

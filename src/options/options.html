@@ -26,6 +26,7 @@
                     <p class="menu-label">サービス連携</p>
                     <ul class="menu-list">
                         <li><a href="#" class="is-active">Slack通知</a></li>
+                        <li><a href="#google-chat-notification-settings">Google Chat通知</a></li>
                         <li><a href="#domain-settings">KING OF TIMEドメイン</a></li>
                     </ul>
                 </aside>
@@ -324,6 +325,102 @@
                     </div>
                     </div>
 
+
+                </div>
+
+                <h4>Google Chatメッセージ通知</h4>
+                <div id="google-chat-notification-settings" class="box">
+
+                    <div class="field is-horizontal">
+                    <div class="field-label is-normal">
+                        <label class="checkbox">
+                            <input id="googleChatEnabled" type="checkbox">有効にする
+                        </label>
+                    </div>
+                    <div class="field-body">
+                        <!-- right empty for spacing -->
+                    </div>
+                    </div>
+
+                    <div class="field is-horizontal">
+                    <div class="field-label is-normal">
+                        <label class="label">Webhook URL<br/>(複数指定可)</label>
+                    </div>
+                    <div class="field-body">
+                        <div class="field">
+                        <div class="control">
+                            <input id="googleChatWebhooksUrl" class="input" type="text" placeholder="e.g. https://chat.googleapis.com/v1/spaces/XXX/messages?key=XXX&token=XXX">
+                        </div>
+                        <p class="help">Google Chatスペースで Incoming Webhook を発行して設定します。複数URLは半角スペース区切りで指定できます。</p>
+                        </div>
+                    </div>
+                    </div>
+
+                    <div class="field is-horizontal">
+                    <div class="field-label is-normal">
+                        <label class="label">出勤メッセージ</label>
+                    </div>
+                    <div class="field-body">
+                        <div class="field">
+                        <div class="control">
+                            <input id="googleChatClockInMessage" class="input" type="text" placeholder="e.g. 出社しました。">
+                        </div>
+                        </div>
+                    </div>
+                    </div>
+
+                    <div class="field is-horizontal">
+                    <div class="field-label is-normal">
+                        <label class="label">退勤メッセージ</label>
+                    </div>
+                    <div class="field-body">
+                        <div class="field">
+                        <div class="control">
+                            <input id="googleChatClockOutMessage" class="input" type="text" placeholder="e.g. 退社します。">
+                        </div>
+                        </div>
+                    </div>
+                    </div>
+
+                    <div class="field is-horizontal">
+                    <div class="field-label is-normal">
+                        <label class="label">休始メッセージ</label>
+                    </div>
+                    <div class="field-body">
+                        <div class="field">
+                        <div class="control">
+                            <input id="googleChatTakeABreakMessage" class="input" type="text" placeholder="e.g. 休憩入ります。">
+                        </div>
+                        </div>
+                    </div>
+                    </div>
+
+                    <div class="field is-horizontal">
+                    <div class="field-label is-normal">
+                        <label class="label">休終メッセージ</label>
+                    </div>
+                    <div class="field-body">
+                        <div class="field">
+                        <div class="control">
+                            <input id="googleChatBreakIsOverMessage" class="input" type="text" placeholder="e.g. 再開します。">
+                        </div>
+                        </div>
+                    </div>
+                    </div>
+
+                    <div class="field is-horizontal">
+                    <div class="field-label">
+                        <!-- Left empty for spacing -->
+                    </div>
+                    <div class="field-body">
+                        <div class="field">
+                        <div class="control">
+                            <a id="googleChatApply" class="button is-link">適用</a>
+                            <a id="googleChatTest" class="button">テスト送信</a>
+                        </div>
+                        </div>
+                    </div>
+                    </div>
 
                 </div>
 

@@ -65,11 +65,39 @@ const applySlackStatusOptions = () => {
 
 }
 
+const applyGoogleChatOptions = () => {
+  const googleChatEnabled = document.getElementById('googleChatEnabled').checked,
+        googleChatWebhooksUrl = document.getElementById('googleChatWebhooksUrl').value,
+        googleChatClockInMessage = document.getElementById('googleChatClockInMessage').value,
+        googleChatClockOutMessage = document.getElementById('googleChatClockOutMessage').value,
+        googleChatTakeABreakMessage = document.getElementById('googleChatTakeABreakMessage').value,
+        googleChatBreakIsOverMessage = document.getElementById('googleChatBreakIsOverMessage').value;
+
+  chrome.storage.sync.set({
+    googleChatEnabled: googleChatEnabled,
+    googleChatWebhooksUrl: googleChatWebhooksUrl,
+    googleChatClockInMessage: googleChatClockInMessage,
+    googleChatClockOutMessage: googleChatClockOutMessage,
+    googleChatTakeABreakMessage: googleChatTakeABreakMessage,
+    googleChatBreakIsOverMessage: googleChatBreakIsOverMessage
+  }, () => {
+    const button = document.getElementById('googleChatApply');
+    button.classList.add("is-loading")
+    setTimeout(() => {
+      button.classList.remove("is-loading")
+    }, 750);
+  });
+
+  if(!googleChatEnabled){
+    alert('有効にするチェックが入っていません。');
+  }
+}
+
 const restoreOptions = () => {
   chrome.storage.sync.get([
     "debuggable",
 
-    // Message
+    // Slack Message
     "slackEnabled",
     "slackChannel",
     "slackClockInMessage",
@@ -80,7 +108,7 @@ const restoreOptions = () => {
     "slackToken",
     "slackWebHooksUrl",
 
-    // Status
+    // Slack Status
     "slackStatusEnabled",
     "slackClockInStatusEmoji",
     "slackClockInStatusText",
@@ -89,6 +117,14 @@ const restoreOptions = () => {
     "slackTakeABreakStatusEmoji",
     "slackTakeABreakStatusText",
     "slackStatusToken",
+
+    // Google Chat
+    "googleChatEnabled",
+    "googleChatWebhooksUrl",
+    "googleChatClockInMessage",
+    "googleChatClockOutMessage",
+    "googleChatTakeABreakMessage",
+    "googleChatBreakIsOverMessage",
 
     // KING OF TIME Domain
     "s2Selected",
@@ -121,6 +157,13 @@ const restoreOptions = () => {
     document.getElementById('slackTakeABreakStatusEmoji').value = items.slackTakeABreakStatusEmoji ? items.slackTakeABreakStatusEmoji: "";
     document.getElementById('slackTakeABreakStatusText').value = items.slackTakeABreakStatusText ? items.slackTakeABreakStatusText: "";
     document.getElementById('slackStatusToken').value = items.slackStatusToken ? items.slackStatusToken: "";
+
+    document.getElementById('googleChatEnabled').checked = items.googleChatEnabled;
+    document.getElementById('googleChatWebhooksUrl').value = items.googleChatWebhooksUrl ? items.googleChatWebhooksUrl : "";
+    document.getElementById('googleChatClockInMessage').value = items.googleChatClockInMessage ? items.googleChatClockInMessage : "";
+    document.getElementById('googleChatClockOutMessage').value = items.googleChatClockOutMessage ? items.googleChatClockOutMessage : "";
+    document.getElementById('googleChatTakeABreakMessage').value = items.googleChatTakeABreakMessage ? items.googleChatTakeABreakMessage : "";
+    document.getElementById('googleChatBreakIsOverMessage').value = items.googleChatBreakIsOverMessage ? items.googleChatBreakIsOverMessage : "";
 
     document.getElementById('s2Selected').checked = items.s2Selected || (!items.s3Selected && !items.s4Selected);
     document.getElementById('s3Selected').checked = items.s3Selected;
@@ -200,6 +243,24 @@ const changeStatus = () => {
   }
 }
 
+const postToGoogleChat = () => {
+  const googleChatWebhooksUrl = document.getElementById('googleChatWebhooksUrl').value,
+        googleChatClockInMessage = document.getElementById('googleChatClockInMessage').value;
+
+  const webhookUrls = googleChatWebhooksUrl.split(' ').filter(u => u.length > 0);
+  for (let i = 0; i < webhookUrls.length; i++) {
+    post(webhookUrls[i],
+      {
+        'Content-Type': 'application/json; charset=utf-8',
+      },
+      {
+        'text': googleChatClockInMessage ? googleChatClockInMessage : 'テスト'
+      },
+      'googleChatTest'
+    );
+  }
+}
+
 const post = (endpoint, headers, payload, buttonId = 'slackTest') => {
   const button = document.getElementById(buttonId);
   button.classList.add('is-loading');
@@ -223,6 +284,9 @@ document.getElementById('slackTest').addEventListener('click', postToSlack);
 
 document.getElementById('slackStatusApply').addEventListener('click', applySlackStatusOptions);
 document.getElementById('slackStatusTest').addEventListener('click', changeStatus);
+
+document.getElementById('googleChatApply').addEventListener('click', applyGoogleChatOptions);
+document.getElementById('googleChatTest').addEventListener('click', postToGoogleChat);
 
 document.getElementById('s2Selected').addEventListener('change', () => {
   chrome.storage.sync.set({s2Selected: true, s3Selected: false, s4Selected: false});
