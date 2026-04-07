@@ -1,0 +1,29 @@
+name: リリースzip作成
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: zipを作成
+        run: zip -r kot-chrome-assistant.zip . -x '*.git*' -x 'docs/**/*' -x '*.zip' -x '.all-contributorsrc' -x 'test/**/*' -x '.github/**/*' -x 'node_modules/**/*' -x '.claude/**/*'
+
+      - name: manifest.jsonからバージョン取得
+        id: version
+        run: echo "version=$(jq -r .version manifest.json)" >> "$GITHUB_OUTPUT"
+
+      - name: GitHubリリース作成
+        uses: softprops/action-gh-release@v2
+        with:
+          name: v${{ steps.version.outputs.version }}
+          files: kot-chrome-assistant.zip
+          generate_release_notes: true
