@@ -40,20 +40,26 @@
 #### GCPプロジェクトの準備（管理者が1回だけ実施）
 
 1. [Google Cloud Console](https://console.cloud.google.com/) でプロジェクトを作成
-2. 「APIとサービス」→「ライブラリ」→ **Google Chat API** を有効化
-3. Google Chat API →「構成」タブで以下を設定:
+2. **Google Chat APIの有効化**
+   - 「APIとサービス」→「ライブラリ」→ 「Google Chat API」を検索して有効化
+3. **Chat appの構成**
+   - 「APIとサービス」→「Google Chat API」→「構成」タブ
    - アプリ名: 任意（例: KoT勤怠チャット通知）
-   - アバターURL: 任意のアイコン画像URL
+   - アバターURL: 任意のアイコン画像URL（必須）
    - 説明: 任意
    - インタラクティブ機能: すべてOFF
    - 公開設定: 組織内の対象ユーザーに公開
-4. 「APIとサービス」→「OAuth同意画面」を設定:
-   - User Type: **内部**
-   - スコープ: `https://www.googleapis.com/auth/chat.messages.create`
-5. 「認証情報」→「認証情報を作成」→「OAuth 2.0 クライアントID」:
+   - 「保存」をクリック
+4. **Google Auth Platformの設定**
+   - 「Google Auth Platform」→「対象」→ User Type を **内部** に設定
+   - 「Google Auth Platform」→「データアクセス」→ スコープを追加: `https://www.googleapis.com/auth/chat.messages.create`
+   - ※ 旧UIでは「OAuth同意画面」として表示される場合があります
+5. **OAuthクライアントIDの作成**
+   - 「Google Auth Platform」→「クライアント」→「クライアントの作成」
    - アプリケーションの種類: **ウェブ アプリケーション**
    - 承認済みのリダイレクトURI: `https://<拡張のID>.chromiumapp.org/`
-   - 拡張のIDは `chrome://extensions` で確認
+   - 拡張のIDは `chrome://extensions` で確認できます
+   - ※ 旧UIでは「認証情報」→「認証情報を作成」→「OAuth 2.0 クライアントID」
 
 #### 各ユーザーの設定
 
