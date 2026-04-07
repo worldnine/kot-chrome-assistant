@@ -1,75 +1,90 @@
-# MyレコーダーChromeアシスタント
+# MyレコーダーChromeアシスタント（Google Chat対応版）
 
-Chromeウェブストア - MyレコーダーChromeアシスタント・ページ
-https://chrome.google.com/webstore/detail/pifbdpooppfkllaiobkaoeocbfmpabaj/
+> [shoito/kot-chrome-assistant](https://github.com/shoito/kot-chrome-assistant) のフォークです。Google Chat通知機能を追加しています。
 
 勤怠管理システム「[Myレコーダー | KING OF TIME](https://kingoftime.jp/record/myrecorder/)」を快適に使えるようにするためのChrome拡張です。
 
-## ブラウザの専用ボタンからポップアップ表示
-ブックマークからMyレコーダーページを開くことすら面倒な人向けに、ポップアップ表示して、素早く出勤や退勤できるようにします。
-![Browser Action](docs/images/browser-action.png)
+## 機能一覧
 
-## Myレコーダーページの出勤、退勤ボタンの表示アシスト
-次のアクションを分かりやすくして、2重に出勤や退勤をしてしまう誤操作を予防します。
-![Content Scripts](docs/images/content-scripts-clockout.png)
+- ブラウザの専用ボタンからMyレコーダーをポップアップ表示
+- 出勤/退勤ボタンの表示アシスト（誤操作防止）
+- **Google Chat通知（Incoming Webhook）** — ボット名義で投稿
+- **Google Chatユーザー認証投稿（OAuth2）** — 自分のアイコン・名前で投稿
+- Slackメッセージ通知
+- Slackステータス変更
 
-## 出勤、退勤時のGoogle Chatメッセージ通知
-設定したGoogle ChatスペースのIncoming Webhookに対して、以下のようなメッセージが送られるようにできます。
-メッセージやWebhook URLはカスタマイズ可能です。複数のWebhook URLを指定して同時に通知することもできます。
+## インストール
 
-- 出勤ボタン押下時に「出社しました。」
-- 退勤ボタン押下時に「退社します。」
+1. このリポジトリをクローンまたはzipでダウンロード
+2. Chromeで `chrome://extensions` を開く
+3. 右上の「デベロッパーモード」をONにする
+4. 「パッケージ化されていない拡張機能を読み込む」をクリック
+5. クローンしたディレクトリを選択
 
-※ Google Chatスペースで Incoming Webhook を発行して、オプション画面でWebhook URLを設定してください。
+## Google Chat通知の設定
 
-## 出勤、退勤時のGoogle Chatユーザー認証投稿
-Google Chat APIのOAuth2ユーザー認証を使い、自分のGoogleアカウント（アイコン・名前）でメッセージを投稿できます。
+### 方法1: Incoming Webhook（ボット名義）
 
-- 出勤ボタン押下時に「出社しました。」
-- 退勤ボタン押下時に「退社します。」
+手軽に使えますが、投稿者はWebhookのボット名義になります。
 
-### セットアップ手順
-1. Google Cloud Consoleでプロジェクトを作成（または既存プロジェクトを使用）
-2. Google Chat API を有効化
-3. OAuth 同意画面を設定（スコープ: `chat.messages.create`）
-4. 認証情報 > OAuth 2.0 クライアントID を作成（アプリケーションの種類: **Chrome拡張機能**、拡張機能IDを指定）
-5. 取得したクライアントIDをオプション画面の「OAuth Client ID」に入力
-6. 「Googleに接続」ボタンで認証、投稿先スペースIDを設定
+1. Google Chatスペースを開く
+2. スペース名をクリック → 「アプリと統合」→「Webhookを追加」
+3. 名前を入力して「保存」→ Webhook URLをコピー
+4. 拡張のオプション画面 →「Google Chatメッセージ通知」→ 有効化
+5. Webhook URLを貼り付け、各イベントのメッセージを入力 →「適用」
 
-※ Google Workspaceアカウントが必要です。個人の@gmail.comアカウントではChat APIが利用できません。
-※ ユーザー認証投稿ではChat appとの関連表示が残ります。
+### 方法2: OAuth2ユーザー認証（自分の名前で投稿）
 
-## 出勤、退勤時のSlackメッセージ通知
-設定したSlackチャンネルに対して、以下のようなメッセージが送られるようにできます。  
-メッセージやチャンネルはカスタマイズ可能です。
+自分のGoogleアカウント（アイコン・名前）で投稿できます。Google Workspaceアカウントが必要です。
 
-- 出勤ボタン押下時に「出社しました。」
-- 退勤ボタン押下時に「退社します。」
+#### GCPプロジェクトの準備（管理者が1回だけ実施）
 
-## 出勤、退勤時のSlackステータス変更
-設定したステータス絵文字やステータステキストで、以下のようなステータスに変更できます。  
-ステータス絵文字やステータステキストはカスタマイズ可能です。
+1. [Google Cloud Console](https://console.cloud.google.com/) でプロジェクトを作成
+2. 「APIとサービス」→「ライブラリ」→ **Google Chat API** を有効化
+3. Google Chat API →「構成」タブで以下を設定:
+   - アプリ名: 任意（例: KoT勤怠チャット通知）
+   - アバターURL: 任意のアイコン画像URL
+   - 説明: 任意
+   - インタラクティブ機能: すべてOFF
+   - 公開設定: 組織内の対象ユーザーに公開
+4. 「APIとサービス」→「OAuth同意画面」を設定:
+   - User Type: **内部**
+   - スコープ: `https://www.googleapis.com/auth/chat.messages.create`
+5. 「認証情報」→「認証情報を作成」→「OAuth 2.0 クライアントID」:
+   - アプリケーションの種類: **ウェブ アプリケーション**
+   - 承認済みのリダイレクトURI: `https://<拡張のID>.chromiumapp.org/`
+   - 拡張のIDは `chrome://extensions` で確認
 
-- 出勤ボタン押下時に「:office: 仕事中」
-- 退勤ボタン押下時に「:house: プライベートタイム」
+#### 各ユーザーの設定
 
-## Contributors ✨
+1. 拡張のオプション画面 →「Google Chatユーザー認証投稿」→ 有効化
+2. 管理者から共有された **OAuth Client ID** を入力
+3. **投稿先スペースID** を入力
+   - Google Chatでスペースを開き、URLの末尾部分（例: `https://chat.google.com/room/AAAAxxxxBBBB` の `AAAAxxxxBBBB`）
+   - `spaces/AAAAxxxxBBBB` 形式やURL全体でもOK
+   - 複数スペースは半角スペース区切り
+4. 各イベントのメッセージを入力 →「適用」
+5. 「Googleに接続」→ Googleの認証画面で許可
+6. 「テスト送信」で動作確認
 
-<!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
-<!-- prettier-ignore-start -->
-<!-- markdownlint-disable -->
-<table>
-  <tbody>
-    <tr>
-      <td align="center" valign="top" width="14.28%"><a href="https://github.com/shoito"><img src="https://avatars.githubusercontent.com/u/37051?v=4?s=100" width="100px;" alt="shoito"/><br /><sub><b>shoito</b></sub></a><br /><a href="https://github.com/shoito/kot-chrome-assistant/commits?author=shoito" title="Documentation">📖</a> <a href="#business-shoito" title="Business development">💼</a> <a href="https://github.com/shoito/kot-chrome-assistant/commits?author=shoito" title="Code">💻</a> <a href="#design-shoito" title="Design">🎨</a> <a href="#ideas-shoito" title="Ideas, Planning, & Feedback">🤔</a></td>
-      <td align="center" valign="top" width="14.28%"><a href="https://cti1650-portfolio-site.vercel.app/"><img src="https://avatars.githubusercontent.com/u/15701307?v=4?s=100" width="100px;" alt="cti1650"/><br /><sub><b>cti1650</b></sub></a><br /><a href="https://github.com/shoito/kot-chrome-assistant/commits?author=cti1650" title="Code">💻</a></td>
-      <td align="center" valign="top" width="14.28%"><a href="https://github.com/hirobel"><img src="https://avatars.githubusercontent.com/u/350904?v=4?s=100" width="100px;" alt="Hiroaki Katoo"/><br /><sub><b>Hiroaki Katoo</b></sub></a><br /><a href="https://github.com/shoito/kot-chrome-assistant/commits?author=hirobel" title="Code">💻</a></td>
-      <td align="center" valign="top" width="14.28%"><a href="https://github.com/ueki-kazuki"><img src="https://avatars.githubusercontent.com/u/6090912?v=4?s=100" width="100px;" alt="Kazuki Ueki"/><br /><sub><b>Kazuki Ueki</b></sub></a><br /><a href="https://github.com/shoito/kot-chrome-assistant/commits?author=ueki-kazuki" title="Code">💻</a></td>
-    </tr>
-  </tbody>
-</table>
+## Slack通知の設定
 
-<!-- markdownlint-restore -->
-<!-- prettier-ignore-end -->
+### メッセージ通知
 
-<!-- ALL-CONTRIBUTORS-LIST:END -->
+オプション画面 →「Slackメッセージ通知」で設定。「ユーザーとして通知する」（Token方式）と「Incoming WebHooks」の2方式に対応。
+
+### ステータス変更
+
+オプション画面 →「Slackステータス更新」で設定。出勤/退勤/休憩中のステータス絵文字・テキストをカスタマイズ可能。
+
+## KING OF TIMEドメイン設定
+
+オプション画面でs2/s3/s4サブドメインの切り替え、ユーザー認証/SAML認証の切り替えが可能。
+
+## ライセンス
+
+MIT
+
+## 元リポジトリ
+
+[shoito/kot-chrome-assistant](https://github.com/shoito/kot-chrome-assistant)
