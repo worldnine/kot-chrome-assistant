@@ -98,11 +98,22 @@ const clearCachedToken = () => {
   cachedTokenExpiresAt = 0;
 };
 
+// トークン取得を試行（サイレント → interactive フォールバック）
+const acquireToken = async (clientId) => {
+  try {
+    return await getGoogleChatAuthToken(clientId, false);
+  } catch (e) {
+    // サイレント取得失敗時は interactive で再認証
+    clearCachedToken();
+    return await getGoogleChatAuthToken(clientId, true);
+  }
+};
+
 // Google Chat APIにユーザー認証でメッセージ投稿
 const postGoogleChatUserAuth = async (clientId, spaceId, messageText, sendResponse) => {
   try {
     const normalizedId = normalizeSpaceId(spaceId);
-    const token = await getGoogleChatAuthToken(clientId, false);
+    const token = await acquireToken(clientId);
     const endpoint = `https://chat.googleapis.com/v1/spaces/${normalizedId}/messages`;
 
     const res = await fetch(endpoint, {
@@ -117,7 +128,7 @@ const postGoogleChatUserAuth = async (clientId, spaceId, messageText, sendRespon
     if (res.ok) {
       sendResponse({ 'status': 'success' });
     } else if (res.status === 401) {
-      // トークン期限切れ: キャッシュクリアして interactive で再取得を試みる
+      // APIがトークン拒否: キャッシュクリアして interactive で再取得
       clearCachedToken();
       try {
         const newToken = await getGoogleChatAuthToken(clientId, true);
