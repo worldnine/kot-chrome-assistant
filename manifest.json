@@ -19,6 +19,7 @@
   },
   "permissions": [
     "storage",
+    "identity",
     "declarativeNetRequest",
     "declarativeNetRequestFeedback",
     "tabs"
@@ -35,7 +36,8 @@
     "https://*.ta.kingoftime.jp/independent/recorder2/personal/*",
     "https://slack.com/api/*",
     "https://hooks.slack.com/services/*",
-    "https://chat.googleapis.com/v1/spaces/*"
+    "https://chat.googleapis.com/v1/spaces/*",
+    "https://www.googleapis.com/oauth2/v3/userinfo"
   ],
   "content_scripts": [
     {

@@ -38,6 +38,140 @@ const validateEndpoint = (endpoint) => {
   return whitelist.some((l) => endpoint.startsWith(l));
 };
 
+// --- Google Chat OAuth2 ユーザー認証 ---
+
+const GOOGLE_CHAT_SCOPE = 'https://www.googleapis.com/auth/chat.messages.create';
+
+// トークンキャッシュ（メモリ内、Service Worker生存中のみ）
+let cachedToken = null;
+let cachedTokenExpiresAt = 0;
+
+// スペースID正規化: URL形式、API形式、ID単体すべて受け付け
+const normalizeSpaceId = (input) => {
+  const urlMatch = input.match(/chat\.google\.com\/room\/([A-Za-z0-9_-]+)/);
+  if (urlMatch) return urlMatch[1];
+  return input.replace(/^spaces\//, '');
+};
+
+// OAuth2トークン取得（chrome.identity.launchWebAuthFlow使用）
+const getGoogleChatAuthToken = (clientId, interactive) => {
+  // キャッシュが有効ならそのまま返す
+  if (!interactive && cachedToken && Date.now() < cachedTokenExpiresAt) {
+    return Promise.resolve(cachedToken);
+  }
+
+  return new Promise((resolve, reject) => {
+    const redirectUrl = chrome.identity.getRedirectURL();
+    const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth'
+      + '?client_id=' + encodeURIComponent(clientId)
+      + '&response_type=token'
+      + '&redirect_uri=' + encodeURIComponent(redirectUrl)
+      + '&scope=' + encodeURIComponent(GOOGLE_CHAT_SCOPE)
+      + (interactive ? '' : '&prompt=none');
+
+    chrome.identity.launchWebAuthFlow(
+      { url: authUrl, interactive: interactive },
+      (responseUrl) => {
+        if (chrome.runtime.lastError || !responseUrl) {
+          reject(chrome.runtime.lastError || new Error('認証がキャンセルされました'));
+          return;
+        }
+        const params = new URL(responseUrl.replace('#', '?')).searchParams;
+        const token = params.get('access_token');
+        const expiresIn = parseInt(params.get('expires_in') || '3600', 10);
+        if (token) {
+          // キャッシュに保存（有効期限の5分前に失効扱い）
+          cachedToken = token;
+          cachedTokenExpiresAt = Date.now() + (expiresIn - 300) * 1000;
+          resolve(token);
+        } else {
+          reject(new Error('アクセストークンが取得できませんでした'));
+        }
+      }
+    );
+  });
+};
+
+// キャッシュクリア
+const clearCachedToken = () => {
+  cachedToken = null;
+  cachedTokenExpiresAt = 0;
+};
+
+// Google Chat APIにユーザー認証でメッセージ投稿
+const postGoogleChatUserAuth = async (clientId, spaceId, messageText, sendResponse) => {
+  try {
+    const normalizedId = normalizeSpaceId(spaceId);
+    const token = await getGoogleChatAuthToken(clientId, false);
+    const endpoint = `https://chat.googleapis.com/v1/spaces/${normalizedId}/messages`;
+
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ text: messageText }),
+    });
+
+    if (res.ok) {
+      sendResponse({ 'status': 'success' });
+    } else if (res.status === 401) {
+      // トークン期限切れ: キャッシュクリアして interactive で再取得を試みる
+      clearCachedToken();
+      try {
+        const newToken = await getGoogleChatAuthToken(clientId, true);
+        const retryRes = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + newToken,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ text: messageText }),
+        });
+        if (retryRes.ok) {
+          sendResponse({ 'status': 'success' });
+        } else {
+          const text = await retryRes.text();
+          console.error('HTTP ' + retryRes.status + ': ' + text);
+          sendResponse({ 'status': 'failed', 'error': 'post_failed' });
+        }
+      } catch (retryErr) {
+        console.error('再認証に失敗:', retryErr);
+        sendResponse({ 'status': 'failed', 'error': 'reauth_failed' });
+      }
+    } else {
+      const text = await res.text();
+      console.error('HTTP ' + res.status + ': ' + text);
+      sendResponse({ 'status': 'failed', 'error': 'post_failed' });
+    }
+  } catch (err) {
+    console.error('Google Chat投稿エラー:', err);
+    sendResponse({ 'status': 'failed', 'error': 'auth_failed' });
+  }
+};
+
+// 認証状態チェック（非interactiveでトークン取得を試行）
+const checkGoogleChatAuth = async (clientId, sendResponse) => {
+  try {
+    const token = await getGoogleChatAuthToken(clientId, false);
+    // tokenが取得できたらユーザー情報を取得
+    const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (res.ok) {
+      const info = await res.json();
+      sendResponse({ 'status': 'connected', 'email': info.email || '' });
+    } else {
+      sendResponse({ 'status': 'disconnected' });
+    }
+  } catch (err) {
+    sendResponse({ 'status': 'disconnected' });
+  }
+};
+
+// --- ここまで Google Chat OAuth2 ---
+
 const setPopup = (enabled) => {
   chrome.action.setPopup({ popup: enabled ? 'src/browser_action/browser_action.html' : '' });
 };
@@ -55,6 +189,58 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   if (msg.contentScriptQuery === 'changeStatus' && validateEndpoint(msg.endpoint)) {
     postRequest(msg.endpoint, msg.headers, msg.body, sendResponse)
+    return true;
+  }
+
+  // Google Chat OAuth2 ユーザー認証投稿
+  if (msg.contentScriptQuery === 'postGoogleChatUserAuth') {
+    postGoogleChatUserAuth(msg.clientId, msg.spaceId, msg.messageText, sendResponse);
+    return true;
+  }
+
+  // Google Chat OAuth2 接続解除（トークン無効化）
+  if (msg.contentScriptQuery === 'disconnectGoogleChat') {
+    const token = cachedToken;
+    clearCachedToken();
+    if (token) {
+      fetch('https://accounts.google.com/o/oauth2/revoke?token=' + token)
+        .then(() => sendResponse({ 'status': 'disconnected' }))
+        .catch(() => sendResponse({ 'status': 'disconnected' }));
+    } else {
+      sendResponse({ 'status': 'disconnected' });
+    }
+    return true;
+  }
+
+  // Google Chat OAuth2 認証状態チェック
+  if (msg.contentScriptQuery === 'checkGoogleChatAuth') {
+    checkGoogleChatAuth(msg.clientId, sendResponse);
+    return true;
+  }
+
+  // Google Chat OAuth2 接続（interactive認証）
+  if (msg.contentScriptQuery === 'connectGoogleChat') {
+    getGoogleChatAuthToken(msg.clientId, true)
+      .then(async (token) => {
+        // ユーザー情報を取得して返す
+        try {
+          const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+            headers: { 'Authorization': 'Bearer ' + token }
+          });
+          if (res.ok) {
+            const info = await res.json();
+            sendResponse({ 'status': 'connected', 'email': info.email || '' });
+          } else {
+            sendResponse({ 'status': 'connected', 'email': '' });
+          }
+        } catch (e) {
+          sendResponse({ 'status': 'connected', 'email': '' });
+        }
+      })
+      .catch((err) => {
+        console.error('Google接続エラー:', err);
+        sendResponse({ 'status': 'failed', 'error': err.message });
+      });
     return true;
   }
 

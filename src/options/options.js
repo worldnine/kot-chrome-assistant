@@ -93,6 +93,36 @@ const applyGoogleChatOptions = () => {
   }
 }
 
+const applyGoogleChatUserOptions = () => {
+  const googleChatUserEnabled = document.getElementById('googleChatUserEnabled').checked,
+        googleChatOAuthClientId = document.getElementById('googleChatOAuthClientId').value,
+        googleChatUserSpace = document.getElementById('googleChatUserSpace').value,
+        googleChatUserClockInMessage = document.getElementById('googleChatUserClockInMessage').value,
+        googleChatUserClockOutMessage = document.getElementById('googleChatUserClockOutMessage').value,
+        googleChatUserTakeABreakMessage = document.getElementById('googleChatUserTakeABreakMessage').value,
+        googleChatUserBreakIsOverMessage = document.getElementById('googleChatUserBreakIsOverMessage').value;
+
+  chrome.storage.sync.set({
+    googleChatUserEnabled: googleChatUserEnabled,
+    googleChatOAuthClientId: googleChatOAuthClientId,
+    googleChatUserSpace: googleChatUserSpace,
+    googleChatUserClockInMessage: googleChatUserClockInMessage,
+    googleChatUserClockOutMessage: googleChatUserClockOutMessage,
+    googleChatUserTakeABreakMessage: googleChatUserTakeABreakMessage,
+    googleChatUserBreakIsOverMessage: googleChatUserBreakIsOverMessage
+  }, () => {
+    const button = document.getElementById('googleChatUserApply');
+    button.classList.add("is-loading")
+    setTimeout(() => {
+      button.classList.remove("is-loading")
+    }, 750);
+  });
+
+  if(!googleChatUserEnabled){
+    alert('有効にするチェックが入っていません。');
+  }
+}
+
 const restoreOptions = () => {
   chrome.storage.sync.get([
     "debuggable",
@@ -118,13 +148,22 @@ const restoreOptions = () => {
     "slackTakeABreakStatusText",
     "slackStatusToken",
 
-    // Google Chat
+    // Google Chat Webhook
     "googleChatEnabled",
     "googleChatWebhooksUrl",
     "googleChatClockInMessage",
     "googleChatClockOutMessage",
     "googleChatTakeABreakMessage",
     "googleChatBreakIsOverMessage",
+
+    // Google Chat ユーザー認証
+    "googleChatUserEnabled",
+    "googleChatOAuthClientId",
+    "googleChatUserSpace",
+    "googleChatUserClockInMessage",
+    "googleChatUserClockOutMessage",
+    "googleChatUserTakeABreakMessage",
+    "googleChatUserBreakIsOverMessage",
 
     // KING OF TIME Domain
     "s2Selected",
@@ -165,6 +204,26 @@ const restoreOptions = () => {
     document.getElementById('googleChatTakeABreakMessage').value = items.googleChatTakeABreakMessage ? items.googleChatTakeABreakMessage : "";
     document.getElementById('googleChatBreakIsOverMessage').value = items.googleChatBreakIsOverMessage ? items.googleChatBreakIsOverMessage : "";
 
+    document.getElementById('googleChatUserEnabled').checked = items.googleChatUserEnabled;
+    document.getElementById('googleChatOAuthClientId').value = items.googleChatOAuthClientId ? items.googleChatOAuthClientId : "";
+    document.getElementById('googleChatUserSpace').value = items.googleChatUserSpace ? items.googleChatUserSpace : "";
+    document.getElementById('googleChatUserClockInMessage').value = items.googleChatUserClockInMessage ? items.googleChatUserClockInMessage : "";
+    document.getElementById('googleChatUserClockOutMessage').value = items.googleChatUserClockOutMessage ? items.googleChatUserClockOutMessage : "";
+    document.getElementById('googleChatUserTakeABreakMessage').value = items.googleChatUserTakeABreakMessage ? items.googleChatUserTakeABreakMessage : "";
+    document.getElementById('googleChatUserBreakIsOverMessage').value = items.googleChatUserBreakIsOverMessage ? items.googleChatUserBreakIsOverMessage : "";
+
+    // 認証状態チェック
+    if (items.googleChatOAuthClientId) {
+      chrome.runtime.sendMessage(
+        { contentScriptQuery: 'checkGoogleChatAuth', clientId: items.googleChatOAuthClientId },
+        (response) => {
+          if (response && response.status === 'connected') {
+            updateGoogleChatUserAuthUI(true, response.email);
+          }
+        }
+      );
+    }
+
     document.getElementById('s2Selected').checked = items.s2Selected || (!items.s3Selected && !items.s4Selected);
     document.getElementById('s3Selected').checked = items.s3Selected;
     document.getElementById('s4Selected').checked = items.s4Selected;
@@ -176,6 +235,32 @@ const restoreOptions = () => {
     document.getElementById('openInNewTabSelected').checked = items.openInNewTab;
   });
 }
+
+// Google Chatユーザー認証UIの状態更新
+const updateGoogleChatUserAuthUI = (connected, email) => {
+  const statusEl = document.getElementById('googleChatUserAuthStatus');
+  const emailEl = document.getElementById('googleChatUserEmail');
+  const connectBtn = document.getElementById('googleChatUserConnect');
+  const disconnectBtn = document.getElementById('googleChatUserDisconnect');
+
+  if (connected) {
+    statusEl.textContent = '接続済み';
+    statusEl.className = 'tag is-success';
+    connectBtn.style.display = 'none';
+    disconnectBtn.style.display = '';
+    if (email) {
+      emailEl.textContent = email;
+      emailEl.style.display = '';
+    }
+  } else {
+    statusEl.textContent = '未接続';
+    statusEl.className = 'tag is-light';
+    connectBtn.style.display = '';
+    disconnectBtn.style.display = 'none';
+    emailEl.style.display = 'none';
+    emailEl.textContent = '';
+  }
+};
 
 const postToSlack = () => {
   const slackChannel = document.getElementById('slackChannel').value,
@@ -261,6 +346,86 @@ const postToGoogleChat = () => {
   }
 }
 
+const postToGoogleChatUser = () => {
+  const clientId = document.getElementById('googleChatOAuthClientId').value,
+        spaceId = document.getElementById('googleChatUserSpace').value,
+        message = document.getElementById('googleChatUserClockInMessage').value;
+
+  if (!clientId || !spaceId) {
+    console.error('OAuth Client IDとスペースIDを入力してください');
+    return;
+  }
+
+  const button = document.getElementById('googleChatUserTest');
+  button.classList.add('is-loading');
+
+  const spaceIds = spaceId.split(' ').filter(s => s.length > 0);
+  let completed = 0;
+  for (const sid of spaceIds) {
+    chrome.runtime.sendMessage(
+      {
+        contentScriptQuery: 'postGoogleChatUserAuth',
+        clientId: clientId,
+        spaceId: sid,
+        messageText: message || 'テスト',
+      },
+      (response) => {
+        completed++;
+        if (completed === spaceIds.length) {
+          button.classList.remove('is-loading');
+        }
+        if (response && response.status === 'failed') {
+          console.error('Google Chatユーザー認証投稿失敗:', response);
+        } else {
+          console.log('Google Chatユーザー認証投稿成功:', response);
+        }
+      }
+    );
+  }
+}
+
+const connectGoogleChat = () => {
+  const clientId = document.getElementById('googleChatOAuthClientId').value;
+  if (!clientId) {
+    console.error('OAuth Client IDを入力してください');
+    return;
+  }
+
+  const connectBtn = document.getElementById('googleChatUserConnect');
+  connectBtn.classList.add('is-loading');
+
+  chrome.runtime.sendMessage(
+    { contentScriptQuery: 'connectGoogleChat', clientId: clientId },
+    (response) => {
+      connectBtn.classList.remove('is-loading');
+      if (response && response.status === 'connected') {
+        updateGoogleChatUserAuthUI(true, response.email);
+      } else {
+        console.error('Google接続失敗:', response);
+        updateGoogleChatUserAuthUI(false, '');
+      }
+    }
+  );
+}
+
+const disconnectGoogleChat = () => {
+  const clientId = document.getElementById('googleChatOAuthClientId').value;
+  const disconnectBtn = document.getElementById('googleChatUserDisconnect');
+  disconnectBtn.classList.add('is-loading');
+
+  // background側でトークンを無効化
+  chrome.runtime.sendMessage(
+    { contentScriptQuery: 'disconnectGoogleChat', clientId: clientId },
+    () => {
+      disconnectBtn.classList.remove('is-loading');
+      // 有効フラグをOFFにして保存（誤送信防止）
+      document.getElementById('googleChatUserEnabled').checked = false;
+      chrome.storage.sync.set({ googleChatUserEnabled: false });
+      updateGoogleChatUserAuthUI(false, '');
+    }
+  );
+}
+
 const post = (endpoint, headers, payload, buttonId = 'slackTest') => {
   const button = document.getElementById(buttonId);
   button.classList.add('is-loading');
@@ -287,6 +452,11 @@ document.getElementById('slackStatusTest').addEventListener('click', changeStatu
 
 document.getElementById('googleChatApply').addEventListener('click', applyGoogleChatOptions);
 document.getElementById('googleChatTest').addEventListener('click', postToGoogleChat);
+
+document.getElementById('googleChatUserApply').addEventListener('click', applyGoogleChatUserOptions);
+document.getElementById('googleChatUserTest').addEventListener('click', postToGoogleChatUser);
+document.getElementById('googleChatUserConnect').addEventListener('click', connectGoogleChat);
+document.getElementById('googleChatUserDisconnect').addEventListener('click', disconnectGoogleChat);
 
 document.getElementById('s2Selected').addEventListener('change', () => {
   chrome.storage.sync.set({s2Selected: true, s3Selected: false, s4Selected: false});

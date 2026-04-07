@@ -35,13 +35,22 @@
       slackTakeABreakStatusText = '',
       slackStatusToken = '';
 
-  // Google Chat
+  // Google Chat Webhook
   let googleChatEnabled = false,
       googleChatWebhooksUrl = '',
       googleChatClockInMessage = '',
       googleChatClockOutMessage = '',
       googleChatTakeABreakMessage = '',
       googleChatBreakIsOverMessage = '';
+
+  // Google Chat ユーザー認証
+  let googleChatUserEnabled = false,
+      googleChatUserSpace = '',
+      googleChatUserClockInMessage = '',
+      googleChatUserClockOutMessage = '',
+      googleChatUserTakeABreakMessage = '',
+      googleChatUserBreakIsOverMessage = '',
+      googleChatOAuthClientId = '';
 
   const now = new Date(),
       today = [now.getFullYear(), now.getMonth() + 1, now.getDate()].map(d => d.toString().padStart(2, '0')).join(''),
@@ -76,13 +85,22 @@
     "slackTakeABreakStatusText",
     "slackStatusToken",
 
-    // Google Chat
+    // Google Chat Webhook
     "googleChatEnabled",
     "googleChatWebhooksUrl",
     "googleChatClockInMessage",
     "googleChatClockOutMessage",
     "googleChatTakeABreakMessage",
-    "googleChatBreakIsOverMessage"
+    "googleChatBreakIsOverMessage",
+
+    // Google Chat ユーザー認証
+    "googleChatUserEnabled",
+    "googleChatUserSpace",
+    "googleChatUserClockInMessage",
+    "googleChatUserClockOutMessage",
+    "googleChatUserTakeABreakMessage",
+    "googleChatUserBreakIsOverMessage",
+    "googleChatOAuthClientId"
   ], (items) => {
     debuggable = items.debuggable;
 
@@ -106,13 +124,22 @@
     slackTakeABreakStatusText = items.slackTakeABreakStatusText;
     slackStatusToken = items.slackStatusToken;
 
-    // Google Chat
+    // Google Chat Webhook
     googleChatEnabled = items.googleChatEnabled;
     googleChatWebhooksUrl = items.googleChatWebhooksUrl;
     googleChatClockInMessage = items.googleChatClockInMessage;
     googleChatClockOutMessage = items.googleChatClockOutMessage;
     googleChatTakeABreakMessage = items.googleChatTakeABreakMessage;
     googleChatBreakIsOverMessage = items.googleChatBreakIsOverMessage;
+
+    // Google Chat ユーザー認証
+    googleChatUserEnabled = items.googleChatUserEnabled;
+    googleChatUserSpace = items.googleChatUserSpace || '';
+    googleChatUserClockInMessage = items.googleChatUserClockInMessage || '';
+    googleChatUserClockOutMessage = items.googleChatUserClockOutMessage || '';
+    googleChatUserTakeABreakMessage = items.googleChatUserTakeABreakMessage || '';
+    googleChatUserBreakIsOverMessage = items.googleChatUserBreakIsOverMessage || '';
+    googleChatOAuthClientId = items.googleChatOAuthClientId || '';
 
     // 設定読み込み完了後にボタン待ちループを開始
     let intervalCount = 0;
@@ -145,7 +172,7 @@
             clockOutButtonId = buttons.filter(b => b.mark === '2')[0].id,
             breakButtons = buttons.filter(b => b.mark === '0');
 
-      if (slackEnabled || slackStatusEnabled || googleChatEnabled) {
+      if (slackEnabled || slackStatusEnabled || googleChatEnabled || googleChatUserEnabled) {
         document.getElementById('record_' + clockInButtonId).addEventListener('click', clockIn, false);
         document.getElementById('record_' + clockOutButtonId).addEventListener('click', clockOut, false);
         console.log('Content Scripts is injected by KoT Chrome Assistant.');
@@ -173,24 +200,28 @@
   const clockIn = () => {
     postSlackMessage(slackClockInMessage);
     postGoogleChatMessage(googleChatClockInMessage);
+    postGoogleChatUserMessage(googleChatUserClockInMessage);
     changeStatus(CLOCK_IN)
   };
 
   const clockOut = () => {
     postSlackMessage(slackClockOutMessage);
     postGoogleChatMessage(googleChatClockOutMessage);
+    postGoogleChatUserMessage(googleChatUserClockOutMessage);
     changeStatus(CLOCK_OUT)
   };
 
   const takeABreak = () => {
     postSlackMessage(slackTakeABreakMessage);
     postGoogleChatMessage(googleChatTakeABreakMessage);
+    postGoogleChatUserMessage(googleChatUserTakeABreakMessage);
     changeStatus(TAKE_A_BREAK)
   };
 
   const breakIsOver = () => {
     postSlackMessage(slackBreakIsOverMessage);
     postGoogleChatMessage(googleChatBreakIsOverMessage);
+    postGoogleChatUserMessage(googleChatUserBreakIsOverMessage);
     changeStatus(BREAK_IS_OVER)
   };
 
@@ -255,6 +286,23 @@
             'text': message
           }),
           endpoint: webhookUrls[i],
+        }
+      );
+    }
+  };
+
+  const postGoogleChatUserMessage = (message) => {
+    if (!googleChatUserEnabled || !message || message.length === 0) return;
+    if (!googleChatOAuthClientId || !googleChatUserSpace) return;
+
+    const spaceIds = googleChatUserSpace.split(' ').filter(s => s.length > 0);
+    for (let i = 0; i < spaceIds.length; i++) {
+      chrome.runtime.sendMessage(
+        {
+          contentScriptQuery: 'postGoogleChatUserAuth',
+          clientId: googleChatOAuthClientId,
+          spaceId: spaceIds[i],
+          messageText: message,
         }
       );
     }

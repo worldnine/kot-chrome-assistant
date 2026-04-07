@@ -27,6 +27,7 @@
                     <ul class="menu-list">
                         <li><a href="#" class="is-active">Slack通知</a></li>
                         <li><a href="#google-chat-notification-settings">Google Chat通知</a></li>
+                        <li><a href="#google-chat-user-settings">Google Chatユーザー認証</a></li>
                         <li><a href="#domain-settings">KING OF TIMEドメイン</a></li>
                     </ul>
                 </aside>
@@ -417,6 +418,133 @@
                         <div class="control">
                             <a id="googleChatApply" class="button is-link">適用</a>
                             <a id="googleChatTest" class="button">テスト送信</a>
+                        </div>
+                        </div>
+                    </div>
+                    </div>
+
+                </div>
+
+                <h4>Google Chatユーザー認証投稿</h4>
+                <div id="google-chat-user-settings" class="box">
+
+                    <div class="field is-horizontal">
+                    <div class="field-label is-normal">
+                        <label class="checkbox">
+                            <input id="googleChatUserEnabled" type="checkbox">有効にする
+                        </label>
+                    </div>
+                    <div class="field-body">
+                        <!-- right empty for spacing -->
+                    </div>
+                    </div>
+
+                    <div class="field is-horizontal">
+                    <div class="field-label is-normal">
+                        <label class="label">OAuth Client ID</label>
+                    </div>
+                    <div class="field-body">
+                        <div class="field">
+                        <div class="control">
+                            <input id="googleChatOAuthClientId" class="input" type="text" placeholder="e.g. 123456789.apps.googleusercontent.com">
+                        </div>
+                        <p class="help">Google Cloud ConsoleでChrome拡張用OAuthクライアントIDを作成して入力します。Google Chat APIの有効化も必要です。</p>
+                        </div>
+                    </div>
+                    </div>
+
+                    <div class="field is-horizontal">
+                    <div class="field-label is-normal">
+                        <label class="label">認証状態</label>
+                    </div>
+                    <div class="field-body">
+                        <div class="field">
+                        <div class="control">
+                            <a id="googleChatUserConnect" class="button is-info is-small">Googleに接続</a>
+                            <a id="googleChatUserDisconnect" class="button is-warning is-small" style="display: none;">接続解除</a>
+                            <span id="googleChatUserAuthStatus" class="tag is-light">未接続</span>
+                            <span id="googleChatUserEmail" class="tag is-light" style="display: none;"></span>
+                        </div>
+                        <p class="help">Googleアカウントで認証すると、あなたのアイコン・名前でGoogle Chatに投稿できます。Google Workspaceアカウントが必要です。</p>
+                        </div>
+                    </div>
+                    </div>
+
+                    <div class="field is-horizontal">
+                    <div class="field-label is-normal">
+                        <label class="label">投稿先スペース<br/>(複数指定可)</label>
+                    </div>
+                    <div class="field-body">
+                        <div class="field">
+                        <div class="control">
+                            <input id="googleChatUserSpace" class="input" type="text" placeholder="e.g. spaces/AAAAxxxxBBBB">
+                        </div>
+                        <p class="help">投稿先のGoogle ChatスペースIDを入力します。スペースURLの末尾部分、またはAPI形式の <code>spaces/XXXXXX</code> で指定できます。複数は半角スペース区切り。</p>
+                        </div>
+                    </div>
+                    </div>
+
+                    <div class="field is-horizontal">
+                    <div class="field-label is-normal">
+                        <label class="label">出勤メッセージ</label>
+                    </div>
+                    <div class="field-body">
+                        <div class="field">
+                        <div class="control">
+                            <input id="googleChatUserClockInMessage" class="input" type="text" placeholder="e.g. 出社しました。">
+                        </div>
+                        </div>
+                    </div>
+                    </div>
+
+                    <div class="field is-horizontal">
+                    <div class="field-label is-normal">
+                        <label class="label">退勤メッセージ</label>
+                    </div>
+                    <div class="field-body">
+                        <div class="field">
+                        <div class="control">
+                            <input id="googleChatUserClockOutMessage" class="input" type="text" placeholder="e.g. 退社します。">
+                        </div>
+                        </div>
+                    </div>
+                    </div>
+
+                    <div class="field is-horizontal">
+                    <div class="field-label is-normal">
+                        <label class="label">休始メッセージ</label>
+                    </div>
+                    <div class="field-body">
+                        <div class="field">
+                        <div class="control">
+                            <input id="googleChatUserTakeABreakMessage" class="input" type="text" placeholder="e.g. 休憩入ります。">
+                        </div>
+                        </div>
+                    </div>
+                    </div>
+
+                    <div class="field is-horizontal">
+                    <div class="field-label is-normal">
+                        <label class="label">休終メッセージ</label>
+                    </div>
+                    <div class="field-body">
+                        <div class="field">
+                        <div class="control">
+                            <input id="googleChatUserBreakIsOverMessage" class="input" type="text" placeholder="e.g. 再開します。">
+                        </div>
+                        </div>
+                    </div>
+                    </div>
+
+                    <div class="field is-horizontal">
+                    <div class="field-label">
+                        <!-- Left empty for spacing -->
+                    </div>
+                    <div class="field-body">
+                        <div class="field">
+                        <div class="control">
+                            <a id="googleChatUserApply" class="button is-link">適用</a>
+                            <a id="googleChatUserTest" class="button">テスト送信</a>
                         </div>
                         </div>
                     </div>

@@ -22,6 +22,23 @@ https://chrome.google.com/webstore/detail/pifbdpooppfkllaiobkaoeocbfmpabaj/
 
 ※ Google Chatスペースで Incoming Webhook を発行して、オプション画面でWebhook URLを設定してください。
 
+## 出勤、退勤時のGoogle Chatユーザー認証投稿
+Google Chat APIのOAuth2ユーザー認証を使い、自分のGoogleアカウント（アイコン・名前）でメッセージを投稿できます。
+
+- 出勤ボタン押下時に「出社しました。」
+- 退勤ボタン押下時に「退社します。」
+
+### セットアップ手順
+1. Google Cloud Consoleでプロジェクトを作成（または既存プロジェクトを使用）
+2. Google Chat API を有効化
+3. OAuth 同意画面を設定（スコープ: `chat.messages.create`）
+4. 認証情報 > OAuth 2.0 クライアントID を作成（アプリケーションの種類: **Chrome拡張機能**、拡張機能IDを指定）
+5. 取得したクライアントIDをオプション画面の「OAuth Client ID」に入力
+6. 「Googleに接続」ボタンで認証、投稿先スペースIDを設定
+
+※ Google Workspaceアカウントが必要です。個人の@gmail.comアカウントではChat APIが利用できません。
+※ ユーザー認証投稿ではChat appとの関連表示が残ります。
+
 ## 出勤、退勤時のSlackメッセージ通知
 設定したSlackチャンネルに対して、以下のようなメッセージが送られるようにできます。  
 メッセージやチャンネルはカスタマイズ可能です。
