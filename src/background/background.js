@@ -91,6 +91,11 @@ const clearTokenStorage = () => {
   chrome.storage.local.remove(['_gchatAccessToken', '_gchatTokenExpiresAt', '_gchatRefreshToken', '_gchatClientId']);
 };
 
+// access tokenだけ無効化（refresh tokenは残す）
+const invalidateAccessToken = () => {
+  chrome.storage.local.remove(['_gchatAccessToken', '_gchatTokenExpiresAt']);
+};
+
 const refreshAccessToken = async (clientId, clientSecret, refreshToken) => {
   const res = await fetch(TOKEN_ENDPOINT, {
     method: 'POST',
@@ -198,7 +203,7 @@ const postGoogleChatUserAuth = async (clientId, clientSecret, spaceId, messageTe
     if (res.ok) {
       sendResponse({ 'status': 'success' });
     } else if (res.status === 401) {
-      clearTokenStorage();
+      invalidateAccessToken();
       try {
         const newToken = await acquireToken(clientId, clientSecret);
         const retryRes = await fetch(endpoint, {
@@ -281,10 +286,10 @@ const postGoogleChatUserAuthBatch = async (clientId, clientSecret, spaceIds, mes
     const token = await acquireToken(clientId, clientSecret);
     let results = await postToAllSpaces(token, spaceIds, messageText);
 
-    // 401が含まれていればトークン再取得して失敗分を再送
+    // 401が含まれていればaccess tokenを無効化してrefreshで再取得、失敗分を再送
     const failedWith401 = results.filter(r => r.httpStatus === 401);
     if (failedWith401.length > 0) {
-      clearTokenStorage();
+      invalidateAccessToken();
       try {
         const newToken = await acquireToken(clientId, clientSecret);
         const retrySpaceIds = failedWith401.map(r => r.spaceId);
