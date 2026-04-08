@@ -61,10 +61,11 @@ const generateCodeChallenge = async (verifier) => {
   return btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 };
 
-const saveTokenData = (data) => {
+const saveTokenData = (clientId, data) => {
   const toSave = {
     _gchatAccessToken: data.access_token,
     _gchatTokenExpiresAt: Date.now() + (data.expires_in - 300) * 1000,
+    _gchatClientId: clientId,
   };
   if (data.refresh_token) {
     toSave._gchatRefreshToken = data.refresh_token;
@@ -72,14 +73,22 @@ const saveTokenData = (data) => {
   chrome.storage.local.set(toSave);
 };
 
-const loadTokenData = () => {
+const loadTokenData = (clientId) => {
   return new Promise((resolve) => {
-    chrome.storage.local.get(['_gchatAccessToken', '_gchatTokenExpiresAt', '_gchatRefreshToken'], resolve);
+    chrome.storage.local.get(['_gchatAccessToken', '_gchatTokenExpiresAt', '_gchatRefreshToken', '_gchatClientId'], (items) => {
+      // clientIdが変わっていたらトークンを無効扱いにする
+      if (items._gchatClientId && items._gchatClientId !== clientId) {
+        clearTokenStorage();
+        resolve({});
+      } else {
+        resolve(items);
+      }
+    });
   });
 };
 
 const clearTokenStorage = () => {
-  chrome.storage.local.remove(['_gchatAccessToken', '_gchatTokenExpiresAt', '_gchatRefreshToken']);
+  chrome.storage.local.remove(['_gchatAccessToken', '_gchatTokenExpiresAt', '_gchatRefreshToken', '_gchatClientId']);
 };
 
 const refreshAccessToken = async (clientId, clientSecret, refreshToken) => {
@@ -99,7 +108,7 @@ const refreshAccessToken = async (clientId, clientSecret, refreshToken) => {
   }
   const data = await res.json();
   data.refresh_token = data.refresh_token || refreshToken;
-  saveTokenData(data);
+  saveTokenData(clientId, data);
   return data.access_token;
 };
 
@@ -151,12 +160,12 @@ const authorizeWithCodeFlow = async (clientId, clientSecret) => {
     throw new Error('トークン交換失敗: ' + text);
   }
   const tokenData = await tokenRes.json();
-  saveTokenData(tokenData);
+  saveTokenData(clientId, tokenData);
   return tokenData.access_token;
 };
 
 const acquireToken = async (clientId, clientSecret) => {
-  const stored = await loadTokenData();
+  const stored = await loadTokenData(clientId);
 
   if (stored._gchatAccessToken && stored._gchatTokenExpiresAt && Date.now() < stored._gchatTokenExpiresAt) {
     return stored._gchatAccessToken;
@@ -221,11 +230,17 @@ const postGoogleChatUserAuth = async (clientId, clientSecret, spaceId, messageTe
 
 const checkGoogleChatAuth = async (clientId, clientSecret, sendResponse) => {
   try {
-    const stored = await loadTokenData();
-    // refresh tokenがあれば接続済みとみなす
-    if (stored._gchatRefreshToken) {
+    const stored = await loadTokenData(clientId);
+    if (!stored._gchatRefreshToken) {
+      sendResponse({ 'status': 'disconnected' });
+      return;
+    }
+    // 現在のclient資格情報でrefreshできるか検証
+    try {
+      await refreshAccessToken(clientId, clientSecret, stored._gchatRefreshToken);
       sendResponse({ 'status': 'connected' });
-    } else {
+    } catch (e) {
+      clearTokenStorage();
       sendResponse({ 'status': 'disconnected' });
     }
   } catch (err) {
@@ -233,32 +248,57 @@ const checkGoogleChatAuth = async (clientId, clientSecret, sendResponse) => {
   }
 };
 
-// 複数スペースへの一括投稿（トークン取得を1回にまとめる）
+// 指定トークンで全スペースに投稿
+const postToAllSpaces = async (token, spaceIds, messageText) => {
+  const results = [];
+  for (const spaceId of spaceIds) {
+    const normalizedId = normalizeSpaceId(spaceId);
+    const endpoint = `https://chat.googleapis.com/v1/spaces/${normalizedId}/messages`;
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: messageText }),
+      });
+      if (res.ok) {
+        results.push({ spaceId, status: 'success' });
+      } else {
+        const text = await res.text();
+        console.error('HTTP ' + res.status + ' (space ' + spaceId + '): ' + text);
+        results.push({ spaceId, status: 'failed', httpStatus: res.status });
+      }
+    } catch (e) {
+      console.error('投稿エラー (space ' + spaceId + '):', e);
+      results.push({ spaceId, status: 'failed' });
+    }
+  }
+  return results;
+};
+
+// 複数スペースへの一括投稿（401時はトークン再取得して1回だけ再送）
 const postGoogleChatUserAuthBatch = async (clientId, clientSecret, spaceIds, messageText, sendResponse) => {
   try {
     const token = await acquireToken(clientId, clientSecret);
-    const results = [];
-    for (const spaceId of spaceIds) {
-      const normalizedId = normalizeSpaceId(spaceId);
-      const endpoint = `https://chat.googleapis.com/v1/spaces/${normalizedId}/messages`;
+    let results = await postToAllSpaces(token, spaceIds, messageText);
+
+    // 401が含まれていればトークン再取得して失敗分を再送
+    const failedWith401 = results.filter(r => r.httpStatus === 401);
+    if (failedWith401.length > 0) {
+      clearTokenStorage();
       try {
-        const res = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: messageText }),
+        const newToken = await acquireToken(clientId, clientSecret);
+        const retrySpaceIds = failedWith401.map(r => r.spaceId);
+        const retryResults = await postToAllSpaces(newToken, retrySpaceIds, messageText);
+        // 再送結果で上書き
+        results = results.map(r => {
+          const retry = retryResults.find(rr => rr.spaceId === r.spaceId);
+          return retry || r;
         });
-        if (res.ok) {
-          results.push({ spaceId, status: 'success' });
-        } else {
-          const text = await res.text();
-          console.error('HTTP ' + res.status + ' (space ' + spaceId + '): ' + text);
-          results.push({ spaceId, status: 'failed' });
-        }
-      } catch (e) {
-        console.error('投稿エラー (space ' + spaceId + '):', e);
-        results.push({ spaceId, status: 'failed' });
+      } catch (retryErr) {
+        console.error('再認証に失敗:', retryErr);
       }
     }
+
     const allSuccess = results.every(r => r.status === 'success');
     sendResponse({ 'status': allSuccess ? 'success' : 'partial_failure', results });
   } catch (err) {
@@ -300,7 +340,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.contentScriptQuery === 'disconnectGoogleChat') {
-    loadTokenData().then((stored) => {
+    chrome.storage.local.get(['_gchatAccessToken'], (stored) => {
       clearTokenStorage();
       const token = stored._gchatAccessToken;
       if (token) {
