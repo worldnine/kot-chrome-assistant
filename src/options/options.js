@@ -96,6 +96,7 @@ const applyGoogleChatOptions = () => {
 const applyGoogleChatUserOptions = () => {
   const googleChatUserEnabled = document.getElementById('googleChatUserEnabled').checked,
         googleChatOAuthClientId = document.getElementById('googleChatOAuthClientId').value,
+        googleChatOAuthClientSecret = document.getElementById('googleChatOAuthClientSecret').value,
         googleChatUserSpace = document.getElementById('googleChatUserSpace').value,
         googleChatUserClockInMessage = document.getElementById('googleChatUserClockInMessage').value,
         googleChatUserClockOutMessage = document.getElementById('googleChatUserClockOutMessage').value,
@@ -105,6 +106,7 @@ const applyGoogleChatUserOptions = () => {
   chrome.storage.sync.set({
     googleChatUserEnabled: googleChatUserEnabled,
     googleChatOAuthClientId: googleChatOAuthClientId,
+    googleChatOAuthClientSecret: googleChatOAuthClientSecret,
     googleChatUserSpace: googleChatUserSpace,
     googleChatUserClockInMessage: googleChatUserClockInMessage,
     googleChatUserClockOutMessage: googleChatUserClockOutMessage,
@@ -159,6 +161,7 @@ const restoreOptions = () => {
     // Google Chat ユーザー認証
     "googleChatUserEnabled",
     "googleChatOAuthClientId",
+    "googleChatOAuthClientSecret",
     "googleChatUserSpace",
     "googleChatUserClockInMessage",
     "googleChatUserClockOutMessage",
@@ -206,6 +209,7 @@ const restoreOptions = () => {
 
     document.getElementById('googleChatUserEnabled').checked = items.googleChatUserEnabled;
     document.getElementById('googleChatOAuthClientId').value = items.googleChatOAuthClientId ? items.googleChatOAuthClientId : "";
+    document.getElementById('googleChatOAuthClientSecret').value = items.googleChatOAuthClientSecret ? items.googleChatOAuthClientSecret : "";
     document.getElementById('googleChatUserSpace').value = items.googleChatUserSpace ? items.googleChatUserSpace : "";
     document.getElementById('googleChatUserClockInMessage').value = items.googleChatUserClockInMessage ? items.googleChatUserClockInMessage : "";
     document.getElementById('googleChatUserClockOutMessage').value = items.googleChatUserClockOutMessage ? items.googleChatUserClockOutMessage : "";
@@ -213,9 +217,9 @@ const restoreOptions = () => {
     document.getElementById('googleChatUserBreakIsOverMessage').value = items.googleChatUserBreakIsOverMessage ? items.googleChatUserBreakIsOverMessage : "";
 
     // 認証状態チェック
-    if (items.googleChatOAuthClientId) {
+    if (items.googleChatOAuthClientId && items.googleChatOAuthClientSecret) {
       chrome.runtime.sendMessage(
-        { contentScriptQuery: 'checkGoogleChatAuth', clientId: items.googleChatOAuthClientId },
+        { contentScriptQuery: 'checkGoogleChatAuth', clientId: items.googleChatOAuthClientId, clientSecret: items.googleChatOAuthClientSecret },
         (response) => {
           if (response && response.status === 'connected') {
             updateGoogleChatUserAuthUI(true, response.email);
@@ -348,11 +352,12 @@ const postToGoogleChat = () => {
 
 const postToGoogleChatUser = () => {
   const clientId = document.getElementById('googleChatOAuthClientId').value,
+        clientSecret = document.getElementById('googleChatOAuthClientSecret').value,
         spaceId = document.getElementById('googleChatUserSpace').value,
         message = document.getElementById('googleChatUserClockInMessage').value;
 
-  if (!clientId || !spaceId) {
-    console.error('OAuth Client IDとスペースIDを入力してください');
+  if (!clientId || !clientSecret || !spaceId) {
+    console.error('OAuth Client ID、Client Secret、スペースIDを入力してください');
     return;
   }
 
@@ -366,6 +371,7 @@ const postToGoogleChatUser = () => {
       {
         contentScriptQuery: 'postGoogleChatUserAuth',
         clientId: clientId,
+        clientSecret: clientSecret,
         spaceId: sid,
         messageText: message || 'テスト',
       },
@@ -386,8 +392,9 @@ const postToGoogleChatUser = () => {
 
 const connectGoogleChat = () => {
   const clientId = document.getElementById('googleChatOAuthClientId').value;
-  if (!clientId) {
-    console.error('OAuth Client IDを入力してください');
+  const clientSecret = document.getElementById('googleChatOAuthClientSecret').value;
+  if (!clientId || !clientSecret) {
+    console.error('OAuth Client IDとClient Secretを入力してください');
     return;
   }
 
@@ -395,7 +402,7 @@ const connectGoogleChat = () => {
   connectBtn.classList.add('is-loading');
 
   chrome.runtime.sendMessage(
-    { contentScriptQuery: 'connectGoogleChat', clientId: clientId },
+    { contentScriptQuery: 'connectGoogleChat', clientId: clientId, clientSecret: clientSecret },
     (response) => {
       connectBtn.classList.remove('is-loading');
       if (response && response.status === 'connected') {

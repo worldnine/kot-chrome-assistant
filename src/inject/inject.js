@@ -50,7 +50,8 @@
       googleChatUserClockOutMessage = '',
       googleChatUserTakeABreakMessage = '',
       googleChatUserBreakIsOverMessage = '',
-      googleChatOAuthClientId = '';
+      googleChatOAuthClientId = '',
+      googleChatOAuthClientSecret = '';
 
   const now = new Date(),
       today = [now.getFullYear(), now.getMonth() + 1, now.getDate()].map(d => d.toString().padStart(2, '0')).join(''),
@@ -100,7 +101,8 @@
     "googleChatUserClockOutMessage",
     "googleChatUserTakeABreakMessage",
     "googleChatUserBreakIsOverMessage",
-    "googleChatOAuthClientId"
+    "googleChatOAuthClientId",
+    "googleChatOAuthClientSecret"
   ], (items) => {
     debuggable = items.debuggable;
 
@@ -140,6 +142,7 @@
     googleChatUserTakeABreakMessage = items.googleChatUserTakeABreakMessage || '';
     googleChatUserBreakIsOverMessage = items.googleChatUserBreakIsOverMessage || '';
     googleChatOAuthClientId = items.googleChatOAuthClientId || '';
+    googleChatOAuthClientSecret = items.googleChatOAuthClientSecret || '';
 
     // 設定読み込み完了後にボタン待ちループを開始
     let intervalCount = 0;
@@ -301,6 +304,7 @@
         {
           contentScriptQuery: 'postGoogleChatUserAuth',
           clientId: googleChatOAuthClientId,
+          clientSecret: googleChatOAuthClientSecret,
           spaceId: spaceIds[i],
           messageText: message,
         }

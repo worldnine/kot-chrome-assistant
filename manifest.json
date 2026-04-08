@@ -37,7 +37,8 @@
     "https://slack.com/api/*",
     "https://hooks.slack.com/services/*",
     "https://chat.googleapis.com/v1/spaces/*",
-    "https://www.googleapis.com/oauth2/v3/userinfo"
+    "https://www.googleapis.com/oauth2/v3/userinfo",
+    "https://oauth2.googleapis.com/token"
   ],
   "content_scripts": [
     {

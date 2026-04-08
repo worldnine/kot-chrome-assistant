@@ -7,7 +7,6 @@ const postRequest = (endpoint, headers, body, sendResponse) => {
     .then((res) => {
       if (res.ok) {
         return res.json().then((json) => {
-          // Slack APIはレスポンスbody内の ok フィールドで成否を返す
           if (json && json.ok === false) {
             console.error(JSON.stringify(json));
             sendResponse({ 'status': 'failed' });
@@ -38,117 +37,164 @@ const validateEndpoint = (endpoint) => {
   return whitelist.some((l) => endpoint.startsWith(l));
 };
 
-// --- Google Chat OAuth2 ユーザー認証 ---
+// --- Google Chat OAuth2 (Authorization Code Flow + refresh token) ---
 
 const GOOGLE_CHAT_SCOPE = 'https://www.googleapis.com/auth/chat.messages.create';
+const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
 
-// スペースID正規化: URL形式、API形式、ID単体すべて受け付け
 const normalizeSpaceId = (input) => {
   const urlMatch = input.match(/chat\.google\.com\/room\/([A-Za-z0-9_-]+)/);
   if (urlMatch) return urlMatch[1];
   return input.replace(/^spaces\//, '');
 };
 
-// chrome.storage.local にトークンを永続化（Service Worker再起動に耐える）
-const saveTokenToStorage = (token, expiresAt) => {
-  chrome.storage.local.set({ _gchatToken: token, _gchatTokenExpiresAt: expiresAt });
+const generateCodeVerifier = () => {
+  const array = new Uint8Array(32);
+  crypto.getRandomValues(array);
+  return btoa(String.fromCharCode(...array)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 };
 
-const loadTokenFromStorage = () => {
+const generateCodeChallenge = async (verifier) => {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(verifier);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+};
+
+const saveTokenData = (data) => {
+  const toSave = {
+    _gchatAccessToken: data.access_token,
+    _gchatTokenExpiresAt: Date.now() + (data.expires_in - 300) * 1000,
+  };
+  if (data.refresh_token) {
+    toSave._gchatRefreshToken = data.refresh_token;
+  }
+  chrome.storage.local.set(toSave);
+};
+
+const loadTokenData = () => {
   return new Promise((resolve) => {
-    chrome.storage.local.get(['_gchatToken', '_gchatTokenExpiresAt'], (items) => {
-      if (items._gchatToken && items._gchatTokenExpiresAt && Date.now() < items._gchatTokenExpiresAt) {
-        resolve(items._gchatToken);
-      } else {
-        resolve(null);
-      }
-    });
+    chrome.storage.local.get(['_gchatAccessToken', '_gchatTokenExpiresAt', '_gchatRefreshToken'], resolve);
   });
 };
 
 const clearTokenStorage = () => {
-  chrome.storage.local.remove(['_gchatToken', '_gchatTokenExpiresAt']);
+  chrome.storage.local.remove(['_gchatAccessToken', '_gchatTokenExpiresAt', '_gchatRefreshToken']);
 };
 
-// OAuth2トークン取得（chrome.identity.launchWebAuthFlow使用）
-const getGoogleChatAuthToken = (clientId, interactive) => {
-  return new Promise((resolve, reject) => {
-    const redirectUrl = chrome.identity.getRedirectURL();
-    const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth'
-      + '?client_id=' + encodeURIComponent(clientId)
-      + '&response_type=token'
-      + '&redirect_uri=' + encodeURIComponent(redirectUrl)
-      + '&scope=' + encodeURIComponent(GOOGLE_CHAT_SCOPE)
-      + (interactive ? '' : '&prompt=none');
+const refreshAccessToken = async (clientId, clientSecret, refreshToken) => {
+  const res = await fetch(TOKEN_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type: 'refresh_token',
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error('トークン更新失敗: ' + text);
+  }
+  const data = await res.json();
+  data.refresh_token = data.refresh_token || refreshToken;
+  saveTokenData(data);
+  return data.access_token;
+};
 
+const authorizeWithCodeFlow = async (clientId, clientSecret) => {
+  const codeVerifier = generateCodeVerifier();
+  const codeChallenge = await generateCodeChallenge(codeVerifier);
+  const redirectUrl = chrome.identity.getRedirectURL();
+
+  const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth'
+    + '?client_id=' + encodeURIComponent(clientId)
+    + '&response_type=code'
+    + '&redirect_uri=' + encodeURIComponent(redirectUrl)
+    + '&scope=' + encodeURIComponent(GOOGLE_CHAT_SCOPE)
+    + '&access_type=offline'
+    + '&prompt=consent'
+    + '&code_challenge=' + encodeURIComponent(codeChallenge)
+    + '&code_challenge_method=S256';
+
+  const responseUrl = await new Promise((resolve, reject) => {
     chrome.identity.launchWebAuthFlow(
-      { url: authUrl, interactive: interactive },
-      (responseUrl) => {
-        if (chrome.runtime.lastError || !responseUrl) {
+      { url: authUrl, interactive: true },
+      (url) => {
+        if (chrome.runtime.lastError || !url) {
           reject(chrome.runtime.lastError || new Error('認証がキャンセルされました'));
-          return;
-        }
-        const params = new URL(responseUrl.replace('#', '?')).searchParams;
-        const token = params.get('access_token');
-        const expiresIn = parseInt(params.get('expires_in') || '3600', 10);
-        if (token) {
-          // 有効期限の5分前に失効扱いで永続化
-          const expiresAt = Date.now() + (expiresIn - 300) * 1000;
-          saveTokenToStorage(token, expiresAt);
-          resolve(token);
         } else {
-          reject(new Error('アクセストークンが取得できませんでした'));
+          resolve(url);
         }
       }
     );
   });
-};
 
-// トークン取得を試行（ストレージ → サイレント → interactive フォールバック）
-const acquireToken = async (clientId) => {
-  // 1. ストレージから有効なトークンを取得
-  const stored = await loadTokenFromStorage();
-  if (stored) return stored;
+  const code = new URL(responseUrl).searchParams.get('code');
+  if (!code) throw new Error('認証コードが取得できませんでした');
 
-  // 2. サイレント取得を試行
-  try {
-    return await getGoogleChatAuthToken(clientId, false);
-  } catch (e) {
-    // 3. interactive で再認証
-    clearTokenStorage();
-    return await getGoogleChatAuthToken(clientId, true);
+  const tokenRes = await fetch(TOKEN_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      code: code,
+      code_verifier: codeVerifier,
+      grant_type: 'authorization_code',
+      redirect_uri: redirectUrl,
+    }),
+  });
+  if (!tokenRes.ok) {
+    const text = await tokenRes.text();
+    throw new Error('トークン交換失敗: ' + text);
   }
+  const tokenData = await tokenRes.json();
+  saveTokenData(tokenData);
+  return tokenData.access_token;
 };
 
-// Google Chat APIにユーザー認証でメッセージ投稿
-const postGoogleChatUserAuth = async (clientId, spaceId, messageText, sendResponse) => {
+const acquireToken = async (clientId, clientSecret) => {
+  const stored = await loadTokenData();
+
+  if (stored._gchatAccessToken && stored._gchatTokenExpiresAt && Date.now() < stored._gchatTokenExpiresAt) {
+    return stored._gchatAccessToken;
+  }
+
+  if (stored._gchatRefreshToken) {
+    try {
+      return await refreshAccessToken(clientId, clientSecret, stored._gchatRefreshToken);
+    } catch (e) {
+      console.error('トークン更新失敗、再認証します:', e);
+      clearTokenStorage();
+    }
+  }
+
+  return await authorizeWithCodeFlow(clientId, clientSecret);
+};
+
+const postGoogleChatUserAuth = async (clientId, clientSecret, spaceId, messageText, sendResponse) => {
   try {
     const normalizedId = normalizeSpaceId(spaceId);
-    const token = await acquireToken(clientId);
+    const token = await acquireToken(clientId, clientSecret);
     const endpoint = `https://chat.googleapis.com/v1/spaces/${normalizedId}/messages`;
 
     const res = await fetch(endpoint, {
       method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + token,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: messageText }),
     });
 
     if (res.ok) {
       sendResponse({ 'status': 'success' });
     } else if (res.status === 401) {
-      // APIがトークン拒否: キャッシュクリアして interactive で再取得
       clearTokenStorage();
       try {
-        const newToken = await getGoogleChatAuthToken(clientId, true);
+        const newToken = await acquireToken(clientId, clientSecret);
         const retryRes = await fetch(endpoint, {
           method: 'POST',
-          headers: {
-            'Authorization': 'Bearer ' + newToken,
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Authorization': 'Bearer ' + newToken, 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: messageText }),
         });
         if (retryRes.ok) {
@@ -173,13 +219,26 @@ const postGoogleChatUserAuth = async (clientId, spaceId, messageText, sendRespon
   }
 };
 
-// 認証状態チェック（ストレージのトークンで確認）
-const checkGoogleChatAuth = async (clientId, sendResponse) => {
+const checkGoogleChatAuth = async (clientId, clientSecret, sendResponse) => {
   try {
-    const token = await loadTokenFromStorage();
-    if (!token) {
+    const stored = await loadTokenData();
+    if (!stored._gchatAccessToken && !stored._gchatRefreshToken) {
       sendResponse({ 'status': 'disconnected' });
       return;
+    }
+    let token = stored._gchatAccessToken;
+    if (!token || !stored._gchatTokenExpiresAt || Date.now() >= stored._gchatTokenExpiresAt) {
+      if (stored._gchatRefreshToken) {
+        try {
+          token = await refreshAccessToken(clientId, clientSecret, stored._gchatRefreshToken);
+        } catch (e) {
+          sendResponse({ 'status': 'disconnected' });
+          return;
+        }
+      } else {
+        sendResponse({ 'status': 'disconnected' });
+        return;
+      }
     }
     const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
       headers: { 'Authorization': 'Bearer ' + token }
@@ -217,16 +276,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
-  // Google Chat OAuth2 ユーザー認証投稿
   if (msg.contentScriptQuery === 'postGoogleChatUserAuth') {
-    postGoogleChatUserAuth(msg.clientId, msg.spaceId, msg.messageText, sendResponse);
+    postGoogleChatUserAuth(msg.clientId, msg.clientSecret, msg.spaceId, msg.messageText, sendResponse);
     return true;
   }
 
-  // Google Chat OAuth2 接続解除（トークン無効化）
   if (msg.contentScriptQuery === 'disconnectGoogleChat') {
-    loadTokenFromStorage().then((token) => {
+    loadTokenData().then((stored) => {
       clearTokenStorage();
+      const token = stored._gchatAccessToken;
       if (token) {
         fetch('https://accounts.google.com/o/oauth2/revoke?token=' + token)
           .then(() => sendResponse({ 'status': 'disconnected' }))
@@ -238,17 +296,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
-  // Google Chat OAuth2 認証状態チェック
   if (msg.contentScriptQuery === 'checkGoogleChatAuth') {
-    checkGoogleChatAuth(msg.clientId, sendResponse);
+    checkGoogleChatAuth(msg.clientId, msg.clientSecret, sendResponse);
     return true;
   }
 
-  // Google Chat OAuth2 接続（interactive認証）
   if (msg.contentScriptQuery === 'connectGoogleChat') {
-    getGoogleChatAuthToken(msg.clientId, true)
+    authorizeWithCodeFlow(msg.clientId, msg.clientSecret)
       .then(async (token) => {
-        // ユーザー情報を取得して返す
         try {
           const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
             headers: { 'Authorization': 'Bearer ' + token }
