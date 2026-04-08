@@ -13,9 +13,15 @@
 - Slackメッセージ通知
 - Slackステータス変更
 
+## ダウンロード
+
+最新版のzipは以下からダウンロードできます:
+
+**[最新リリース](https://github.com/worldnine/kot-chrome-assistant/releases/latest)**
+
 ## インストール
 
-1. このリポジトリをクローンまたはzipでダウンロード
+1. 上記リンクから `kot-chrome-assistant.zip` をダウンロードして展開
 2. Chromeで `chrome://extensions` を開く
 3. 右上の「デベロッパーモード」をONにする
 4. 「パッケージ化されていない拡張機能を読み込む」をクリック
