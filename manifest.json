@@ -1,7 +1,7 @@
 {
   "name": "MyレコーダーChromeアシスタント（Google Chat対応版）",
   "short_name": "Myレコーダー(GChat)",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "manifest_version": 3,
   "description": "勤怠管理システム「Myレコーダー | KING OF TIME」を快適に使えるようにするための拡張機能です。",
   "icons": {
