@@ -296,20 +296,19 @@
 
   const postGoogleChatUserMessage = (message) => {
     if (!googleChatUserEnabled || !message || message.length === 0) return;
-    if (!googleChatOAuthClientId || !googleChatUserSpace) return;
+    if (!googleChatOAuthClientId || !googleChatOAuthClientSecret || !googleChatUserSpace) return;
 
     const spaceIds = googleChatUserSpace.split(' ').filter(s => s.length > 0);
-    for (let i = 0; i < spaceIds.length; i++) {
-      chrome.runtime.sendMessage(
-        {
-          contentScriptQuery: 'postGoogleChatUserAuth',
-          clientId: googleChatOAuthClientId,
-          clientSecret: googleChatOAuthClientSecret,
-          spaceId: spaceIds[i],
-          messageText: message,
-        }
-      );
-    }
+    // トークン取得を1回にまとめるためバッチ送信
+    chrome.runtime.sendMessage(
+      {
+        contentScriptQuery: 'postGoogleChatUserAuthBatch',
+        clientId: googleChatOAuthClientId,
+        clientSecret: googleChatOAuthClientSecret,
+        spaceIds: spaceIds,
+        messageText: message,
+      }
+    );
   };
 
   const changeStatus = (status) => {

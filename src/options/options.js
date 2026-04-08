@@ -222,7 +222,7 @@ const restoreOptions = () => {
         { contentScriptQuery: 'checkGoogleChatAuth', clientId: items.googleChatOAuthClientId, clientSecret: items.googleChatOAuthClientSecret },
         (response) => {
           if (response && response.status === 'connected') {
-            updateGoogleChatUserAuthUI(true, response.email);
+            updateGoogleChatUserAuthUI(true);
           }
         }
       );
@@ -241,9 +241,8 @@ const restoreOptions = () => {
 }
 
 // Google Chatユーザー認証UIの状態更新
-const updateGoogleChatUserAuthUI = (connected, email) => {
+const updateGoogleChatUserAuthUI = (connected) => {
   const statusEl = document.getElementById('googleChatUserAuthStatus');
-  const emailEl = document.getElementById('googleChatUserEmail');
   const connectBtn = document.getElementById('googleChatUserConnect');
   const disconnectBtn = document.getElementById('googleChatUserDisconnect');
 
@@ -252,17 +251,11 @@ const updateGoogleChatUserAuthUI = (connected, email) => {
     statusEl.className = 'tag is-success';
     connectBtn.style.display = 'none';
     disconnectBtn.style.display = '';
-    if (email) {
-      emailEl.textContent = email;
-      emailEl.style.display = '';
-    }
   } else {
     statusEl.textContent = '未接続';
     statusEl.className = 'tag is-light';
     connectBtn.style.display = '';
     disconnectBtn.style.display = 'none';
-    emailEl.style.display = 'none';
-    emailEl.textContent = '';
   }
 };
 
@@ -365,29 +358,23 @@ const postToGoogleChatUser = () => {
   button.classList.add('is-loading');
 
   const spaceIds = spaceId.split(' ').filter(s => s.length > 0);
-  let completed = 0;
-  for (const sid of spaceIds) {
-    chrome.runtime.sendMessage(
-      {
-        contentScriptQuery: 'postGoogleChatUserAuth',
-        clientId: clientId,
-        clientSecret: clientSecret,
-        spaceId: sid,
-        messageText: message || 'テスト',
-      },
-      (response) => {
-        completed++;
-        if (completed === spaceIds.length) {
-          button.classList.remove('is-loading');
-        }
-        if (response && response.status === 'failed') {
-          console.error('Google Chatユーザー認証投稿失敗:', response);
-        } else {
-          console.log('Google Chatユーザー認証投稿成功:', response);
-        }
+  chrome.runtime.sendMessage(
+    {
+      contentScriptQuery: 'postGoogleChatUserAuthBatch',
+      clientId: clientId,
+      clientSecret: clientSecret,
+      spaceIds: spaceIds,
+      messageText: message || 'テスト',
+    },
+    (response) => {
+      button.classList.remove('is-loading');
+      if (response && (response.status === 'failed' || response.status === 'partial_failure')) {
+        console.error('Google Chatユーザー認証投稿失敗:', response);
+      } else {
+        console.log('Google Chatユーザー認証投稿成功:', response);
       }
-    );
-  }
+    }
+  );
 }
 
 const connectGoogleChat = () => {
@@ -406,10 +393,10 @@ const connectGoogleChat = () => {
     (response) => {
       connectBtn.classList.remove('is-loading');
       if (response && response.status === 'connected') {
-        updateGoogleChatUserAuthUI(true, response.email);
+        updateGoogleChatUserAuthUI(true);
       } else {
         console.error('Google接続失敗:', response);
-        updateGoogleChatUserAuthUI(false, '');
+        updateGoogleChatUserAuthUI(false);
       }
     }
   );
@@ -428,7 +415,7 @@ const disconnectGoogleChat = () => {
       // 有効フラグをOFFにして保存（誤送信防止）
       document.getElementById('googleChatUserEnabled').checked = false;
       chrome.storage.sync.set({ googleChatUserEnabled: false });
-      updateGoogleChatUserAuthUI(false, '');
+      updateGoogleChatUserAuthUI(false);
     }
   );
 }

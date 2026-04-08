@@ -222,35 +222,48 @@ const postGoogleChatUserAuth = async (clientId, clientSecret, spaceId, messageTe
 const checkGoogleChatAuth = async (clientId, clientSecret, sendResponse) => {
   try {
     const stored = await loadTokenData();
-    if (!stored._gchatAccessToken && !stored._gchatRefreshToken) {
-      sendResponse({ 'status': 'disconnected' });
-      return;
-    }
-    let token = stored._gchatAccessToken;
-    if (!token || !stored._gchatTokenExpiresAt || Date.now() >= stored._gchatTokenExpiresAt) {
-      if (stored._gchatRefreshToken) {
-        try {
-          token = await refreshAccessToken(clientId, clientSecret, stored._gchatRefreshToken);
-        } catch (e) {
-          sendResponse({ 'status': 'disconnected' });
-          return;
-        }
-      } else {
-        sendResponse({ 'status': 'disconnected' });
-        return;
-      }
-    }
-    const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-      headers: { 'Authorization': 'Bearer ' + token }
-    });
-    if (res.ok) {
-      const info = await res.json();
-      sendResponse({ 'status': 'connected', 'email': info.email || '' });
+    // refresh tokenがあれば接続済みとみなす
+    if (stored._gchatRefreshToken) {
+      sendResponse({ 'status': 'connected' });
     } else {
       sendResponse({ 'status': 'disconnected' });
     }
   } catch (err) {
     sendResponse({ 'status': 'disconnected' });
+  }
+};
+
+// 複数スペースへの一括投稿（トークン取得を1回にまとめる）
+const postGoogleChatUserAuthBatch = async (clientId, clientSecret, spaceIds, messageText, sendResponse) => {
+  try {
+    const token = await acquireToken(clientId, clientSecret);
+    const results = [];
+    for (const spaceId of spaceIds) {
+      const normalizedId = normalizeSpaceId(spaceId);
+      const endpoint = `https://chat.googleapis.com/v1/spaces/${normalizedId}/messages`;
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: messageText }),
+        });
+        if (res.ok) {
+          results.push({ spaceId, status: 'success' });
+        } else {
+          const text = await res.text();
+          console.error('HTTP ' + res.status + ' (space ' + spaceId + '): ' + text);
+          results.push({ spaceId, status: 'failed' });
+        }
+      } catch (e) {
+        console.error('投稿エラー (space ' + spaceId + '):', e);
+        results.push({ spaceId, status: 'failed' });
+      }
+    }
+    const allSuccess = results.every(r => r.status === 'success');
+    sendResponse({ 'status': allSuccess ? 'success' : 'partial_failure', results });
+  } catch (err) {
+    console.error('Google Chat投稿エラー:', err);
+    sendResponse({ 'status': 'failed', 'error': 'auth_failed' });
   }
 };
 
@@ -281,6 +294,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  if (msg.contentScriptQuery === 'postGoogleChatUserAuthBatch') {
+    postGoogleChatUserAuthBatch(msg.clientId, msg.clientSecret, msg.spaceIds, msg.messageText, sendResponse);
+    return true;
+  }
+
   if (msg.contentScriptQuery === 'disconnectGoogleChat') {
     loadTokenData().then((stored) => {
       clearTokenStorage();
@@ -303,20 +321,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   if (msg.contentScriptQuery === 'connectGoogleChat') {
     authorizeWithCodeFlow(msg.clientId, msg.clientSecret)
-      .then(async (token) => {
-        try {
-          const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-            headers: { 'Authorization': 'Bearer ' + token }
-          });
-          if (res.ok) {
-            const info = await res.json();
-            sendResponse({ 'status': 'connected', 'email': info.email || '' });
-          } else {
-            sendResponse({ 'status': 'connected', 'email': '' });
-          }
-        } catch (e) {
-          sendResponse({ 'status': 'connected', 'email': '' });
-        }
+      .then(() => {
+        sendResponse({ 'status': 'connected' });
       })
       .catch((err) => {
         console.error('Google接続エラー:', err);
