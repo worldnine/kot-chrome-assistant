@@ -1,3 +1,74 @@
+// セットアップURLのデフォルト値
+const GCHAT_DEFAULTS = {
+  clockIn: '出社しました。',
+  clockOut: '退社します。',
+  breakStart: '休憩入ります。',
+  breakEnd: '再開します。',
+};
+
+// セットアップURL処理: #setup=BASE64エンコードJSON をパースして設定を自動入力
+const processSetupUrl = (currentItems) => {
+  const hash = location.hash;
+  if (!hash.startsWith('#setup=')) return;
+
+  let config;
+  try {
+    const base64 = hash.substring('#setup='.length);
+    const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+    const json = new TextDecoder().decode(bytes);
+    config = JSON.parse(json);
+  } catch (e) {
+    console.error('セットアップURLのパースに失敗:', e);
+    return;
+  }
+
+  // スペースIDは追加式（既存を保持、重複排除）
+  let existingSpaces = (currentItems.googleChatUserSpace || '').split(' ').filter(s => s.length > 0);
+  if (config.space) {
+    const newSpaces = config.space.split(' ').filter(s => s.length > 0);
+    for (const s of newSpaces) {
+      if (!existingSpaces.includes(s)) {
+        existingSpaces.push(s);
+      }
+    }
+  }
+
+  // マージ: URLの値 > 既存の値 > デフォルト値
+  const merged = {
+    googleChatUserEnabled: true,
+    googleChatOAuthClientId: config.clientId || currentItems.googleChatOAuthClientId || '',
+    googleChatOAuthClientSecret: config.clientSecret || currentItems.googleChatOAuthClientSecret || '',
+    googleChatUserSpace: existingSpaces.join(' '),
+    googleChatUserClockInMessage: config.clockIn || currentItems.googleChatUserClockInMessage || GCHAT_DEFAULTS.clockIn,
+    googleChatUserClockOutMessage: config.clockOut || currentItems.googleChatUserClockOutMessage || GCHAT_DEFAULTS.clockOut,
+    googleChatUserTakeABreakMessage: config.breakStart || currentItems.googleChatUserTakeABreakMessage || GCHAT_DEFAULTS.breakStart,
+    googleChatUserBreakIsOverMessage: config.breakEnd || currentItems.googleChatUserBreakIsOverMessage || GCHAT_DEFAULTS.breakEnd,
+  };
+
+  // storageに保存
+  chrome.storage.sync.set(merged, () => {
+    // UIに反映
+    document.getElementById('googleChatUserEnabled').checked = true;
+    document.getElementById('googleChatOAuthClientId').value = merged.googleChatOAuthClientId;
+    document.getElementById('googleChatOAuthClientSecret').value = merged.googleChatOAuthClientSecret;
+    document.getElementById('googleChatUserSpace').value = merged.googleChatUserSpace;
+    document.getElementById('googleChatUserClockInMessage').value = merged.googleChatUserClockInMessage;
+    document.getElementById('googleChatUserClockOutMessage').value = merged.googleChatUserClockOutMessage;
+    document.getElementById('googleChatUserTakeABreakMessage').value = merged.googleChatUserTakeABreakMessage;
+    document.getElementById('googleChatUserBreakIsOverMessage').value = merged.googleChatUserBreakIsOverMessage;
+
+    // 通知表示
+    const addedSpaces = config.space ? config.space.split(' ').filter(s => s.length > 0) : [];
+    const msg = addedSpaces.length > 0
+      ? `設定をインポートしました（スペース: ${addedSpaces.join(', ')}）。\n「Googleに接続」をクリックして認証してください。`
+      : '設定をインポートしました。\n「Googleに接続」をクリックして認証してください。';
+    alert(msg);
+
+    // hash除去（リロード時の二重追加防止）
+    history.replaceState(null, '', location.pathname + location.search);
+  });
+};
+
 const applySlackOptions = () => {
   const slackEnabled = document.getElementById('slackEnabled').checked,
         slackChannel = document.getElementById('slackChannel').value,
@@ -237,6 +308,9 @@ const restoreOptions = () => {
 
     document.getElementById('openInPopupSelected').checked = !items.openInNewTab;
     document.getElementById('openInNewTabSelected').checked = items.openInNewTab;
+
+    // セットアップURL処理
+    processSetupUrl(items);
   });
 }
 
