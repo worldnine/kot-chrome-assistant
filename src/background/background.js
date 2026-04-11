@@ -381,10 +381,55 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 
 
-chrome.runtime.onInstalled.addListener(function () {
+// setup.json による初期設定の自動適用
+const applySetupJson = () => {
+  fetch(chrome.runtime.getURL('setup.json'))
+    .then(res => {
+      if (!res.ok) throw new Error('setup.json が見つかりません');
+      return res.json();
+    })
+    .then(config => {
+      chrome.storage.sync.get(['googleChatOAuthClientId'], (existing) => {
+        // 既に設定済みの場合はスキップ（clientIdが同じなら再適用しない）
+        if (existing.googleChatOAuthClientId === config.clientId) return;
+
+        const defaults = {
+          clockIn: '出社しました。',
+          clockOut: '退社します。',
+          breakStart: '休憩入ります。',
+          breakEnd: '再開します。',
+        };
+
+        const settings = {
+          googleChatUserEnabled: true,
+          googleChatOAuthClientId: config.clientId || '',
+          googleChatOAuthClientSecret: config.clientSecret || '',
+          googleChatUserSpace: config.space || '',
+          googleChatUserClockInMessage: config.clockIn || defaults.clockIn,
+          googleChatUserClockOutMessage: config.clockOut || defaults.clockOut,
+          googleChatUserTakeABreakMessage: config.breakStart || defaults.breakStart,
+          googleChatUserBreakIsOverMessage: config.breakEnd || defaults.breakEnd,
+        };
+
+        chrome.storage.sync.set(settings, () => {
+          console.log('setup.json から初期設定を適用しました');
+        });
+      });
+    })
+    .catch(() => {
+      // setup.json が存在しない場合は何もしない（OSS版の通常動作）
+    });
+};
+
+chrome.runtime.onInstalled.addListener(function (details) {
   chrome.storage.sync.get('openInNewTab', function (data) {
     setPopup(!data.openInNewTab);
   });
+
+  // インストール時またはアップデート時にsetup.jsonを適用
+  if (details.reason === 'install' || details.reason === 'update') {
+    applySetupJson();
+  }
 });
 
 chrome.runtime.onStartup.addListener(function () {

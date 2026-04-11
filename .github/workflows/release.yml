@@ -27,3 +27,13 @@ jobs:
           name: v${{ steps.version.outputs.version }}
           files: kot-chrome-assistant.zip
           generate_release_notes: true
+
+      - name: 社内リポジトリへリリース通知
+        if: vars.INTERNAL_REPO != ''
+        continue-on-error: true
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.INTERNAL_REPO_TOKEN }}
+          repository: ${{ vars.INTERNAL_REPO }}
+          event-type: oss-release
+          client-payload: '{"version": "v${{ steps.version.outputs.version }}"}'
