@@ -1,7 +1,7 @@
 {
   "name": "MyレコーダーChromeアシスタント（Google Chat対応版）",
   "short_name": "Myレコーダー(GChat)",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "manifest_version": 3,
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxDpMQpy1zfnxddduycn/qgqfhRiTTJL3yKdVelz4kJh4/RF+lgdk99HRjqDcqxKBOCU4miUn3ejUra064Oxmzfv0Twy/qtMx3YvIl2KrWFVtroFoORljrTpg/0FkbmaVMbvHKlghocLCXXs1P6YhjNDYvenIDnReRPmH/9TwcAPz1QapAFb+w0foenWsjlBecqUY6Fcmu9nuKjdDyNL3tCVNVAblogN/BE6ErUDUa9/azyhfjoR5SwbfiXVNBCRCKT1Z9ENP+KRmgAz+wzmyEkLfxvVGhs6l6y5UrzANrnOGNXnNh21J0mDcv6E5Q3EY12pni9DyP/MPawUQezQpdwIDAQAB",
   "description": "勤怠管理システム「Myレコーダー | KING OF TIME」を快適に使えるようにするための拡張機能です。",
