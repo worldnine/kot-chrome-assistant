@@ -1,0 +1,14 @@
+{
+  "user": {
+    "user_token": "abc123token",
+    "name": "テスト太郎"
+  },
+  "timerecorder": {
+    "record_button": [
+      { "id": "100", "mark": "1", "name": "出勤" },
+      { "id": "200", "mark": "2", "name": "退勤" },
+      { "id": "300", "mark": "0", "name": "休始" },
+      { "id": "400", "mark": "0", "name": "休終" }
+    ]
+  }
+}
