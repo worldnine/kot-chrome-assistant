@@ -1,102 +1,133 @@
-# MyレコーダーChromeアシスタント（Google Chat対応版）
+# KOT Assistant for macOS
 
-> [shoito/kot-chrome-assistant](https://github.com/shoito/kot-chrome-assistant) のフォークです。Google Chat通知機能を追加しています。
+KING OF TIME「[Myレコーダー](https://kingoftime.jp/record/myrecorder/)」用のメニューバー常駐アプリです。
+Chrome 拡張 [kot-chrome-assistant](https://github.com/worldnine/kot-chrome-assistant)（原作: [shoito/kot-chrome-assistant](https://github.com/shoito/kot-chrome-assistant)）を Swift でフルリメイクしたものです。
 
-勤怠管理システム「[Myレコーダー | KING OF TIME](https://kingoftime.jp/record/myrecorder/)」を快適に使えるようにするためのChrome拡張です。
+- メニューバーから 1 クリックで Myレコーダーを開いて打刻
+- 打刻（出勤 / 退勤 / 休始 / 休終）を検知して以下へ自動通知
+  - **Slack メッセージ**（ユーザートークン or Incoming Webhooks、複数ワークスペース/チャンネル対応）
+  - **Slack ステータス**（絵文字＋テキスト。休憩終了時は出勤時ステータスへ復帰）
+  - **Google Chat**（Incoming Webhook）
+  - **Google Chat ユーザー認証**（OAuth2 PKCE。自分のアイコン・名前で投稿）
+- **App Intents** 対応 — Shortcuts / Spotlight / ターミナル（`shortcuts run`）から打刻可能
+- セットアップ URL（`kotassistant://setup?d=BASE64` / 旧拡張形式）による設定配布
 
-## 機能一覧
+## 必要環境
 
-- ブラウザの専用ボタンからMyレコーダーをポップアップ表示
-- 出勤/退勤ボタンの表示アシスト（誤操作防止）
-- **Google Chat通知（Incoming Webhook）** — ボット名義で投稿
-- **Google Chatユーザー認証投稿（OAuth2）** — 自分のアイコン・名前で投稿
-- Slackメッセージ通知
-- Slackステータス変更
+- macOS 14 (Sonoma) 以降
+- ビルドには Xcode 16 以降と [XcodeGen](https://github.com/yonaskolb/XcodeGen)
 
-## ダウンロード
+## ビルド方法
 
-最新版のzipは以下からダウンロードできます:
+```bash
+./scripts/bootstrap.sh        # xcodegen をインストールして KOTAssistant.xcodeproj を生成
+open KOTAssistant.xcodeproj   # Signing & Capabilities で Team を設定して Run
+```
 
-**[最新リリース](https://github.com/worldnine/kot-chrome-assistant/releases/latest)**
+`*.xcodeproj` は XcodeGen の生成物なのでコミットされていません。`project.yml` を変更したら再度 `xcodegen generate` を実行してください。
 
-## インストール
+コアロジックは純 Swift パッケージなので、Mac がなくてもテストできます:
 
-1. 上記リンクから `kot-chrome-assistant.zip` をダウンロードして展開
-2. Chromeで `chrome://extensions` を開く
-3. 右上の「デベロッパーモード」をONにする
-4. 「パッケージ化されていない拡張機能を読み込む」をクリック
-5. クローンしたディレクトリを選択
+```bash
+swift test --package-path Packages/KOTCore
+```
 
-## Google Chat通知の設定
+## 使い方
 
-### 方法1: Incoming Webhook（ボット名義）
+1. アプリを起動するとメニューバーに時計アイコンが常駐します
+2. アイコンをクリックして Myレコーダーにログイン（ログイン状態は永続します）
+3. 「設定…」から通知連携を設定
+4. Myレコーダーの打刻ボタンを押すと、有効化した連携へ自動通知されます
 
-手軽に使えますが、投稿者はWebhookのボット名義になります。
+アイコンは状態で変わります: 未出勤 `deskclock` / 勤務中 `deskclock.fill` / 休憩中 `cup.and.saucer.fill` / 退勤済み `moon.zzz.fill`
 
-1. Google Chatスペースを開く
-2. スペース名をクリック → 「アプリと統合」→「Webhookを追加」
-3. 名前を入力して「保存」→ Webhook URLをコピー
-4. 拡張のオプション画面 →「Google Chatメッセージ通知」→ 有効化
-5. Webhook URLを貼り付け、各イベントのメッセージを入力 →「適用」
+### ターミナルから打刻する
 
-### 方法2: OAuth2ユーザー認証（自分の名前で投稿）
+App Intents が Shortcuts に自動登録されるため、追加実装なしで CLI 相当が使えます:
 
-自分のGoogleアカウント（アイコン・名前）で投稿できます。Google Workspaceアカウントが必要です。
+```bash
+shortcuts run "出勤"
+shortcuts run "退勤"
+shortcuts run "休憩開始"
+shortcuts run "休憩終了"
+shortcuts run "打刻状況"   # 例: 勤務中（出勤 09:00 → 休始 12:00 → 休終 13:00）
+```
 
-#### GCPプロジェクトの準備（管理者が1回だけ実施）
+お好みで alias を:
 
-1. [Google Cloud Console](https://console.cloud.google.com/) でプロジェクトを作成
-2. **Google Chat APIの有効化**
-   - 「APIとサービス」→「ライブラリ」→ 「Google Chat API」を検索して有効化
-3. **Chat appの構成**
-   - 「APIとサービス」→「Google Chat API」→「構成」タブ
-   - アプリ名: 任意（例: KoT勤怠チャット通知）
-   - アバターURL: 任意のアイコン画像URL（必須）
-   - 説明: 任意
-   - インタラクティブ機能: すべてOFF
-   - 公開設定: 組織内の対象ユーザーに公開
-   - 「保存」をクリック
-4. **Google Auth Platformの設定**
-   - 「Google Auth Platform」→「対象」→ User Type を **内部** に設定
-   - 「Google Auth Platform」→「データアクセス」→ スコープを追加: `https://www.googleapis.com/auth/chat.messages.create`
-   - ※ 旧UIでは「OAuth同意画面」として表示される場合があります
-5. **OAuthクライアントIDの作成**
-   - 「Google Auth Platform」→「クライアント」→「クライアントの作成」
-   - アプリケーションの種類: **ウェブ アプリケーション**
-   - 承認済みのリダイレクトURI: `https://<拡張のID>.chromiumapp.org/`
-   - 拡張のIDは `chrome://extensions` で確認できます
-   - ※ 旧UIでは「認証情報」→「認証情報を作成」→「OAuth 2.0 クライアントID」
+```bash
+alias dako='shortcuts run'
+```
 
-#### 各ユーザーの設定
+アプリが起動していなくても `shortcuts run` がバックグラウンドで起動します（Myレコーダーのログインセッションが有効な間）。
 
-1. 拡張のオプション画面 →「Google Chatユーザー認証投稿」→ 有効化
-2. 管理者から共有された **OAuth Client ID** を入力
-3. **投稿先スペースID** を入力
-   - Google Chatでスペースを開き、URLの末尾部分（例: `https://chat.google.com/room/AAAAxxxxBBBB` の `AAAAxxxxBBBB`）
-   - `spaces/AAAAxxxxBBBB` 形式やURL全体でもOK
-   - 複数スペースは半角スペース区切り
-4. 各イベントのメッセージを入力 →「適用」
-5. 「Googleに接続」→ Googleの認証画面で許可
-6. 「テスト送信」で動作確認
+### Google Chat ユーザー認証のセットアップ
 
-## Slack通知の設定
+1. Google Cloud Console で OAuth クライアントを作成（**デスクトップアプリ**タイプ推奨。ループバックリダイレクト `http://127.0.0.1` を使用します）
+2. Google Chat API を有効化（スコープ `chat.messages.create`）
+3. 設定画面に Client ID / Client Secret / スペース ID を入力して「Google に接続」
 
-### メッセージ通知
+スペース ID は 3 形式に対応: `spaces/AAAA` / `AAAA` / `https://chat.google.com/room/AAAA`
 
-オプション画面 →「Slackメッセージ通知」で設定。「ユーザーとして通知する」（Token方式）と「Incoming WebHooks」の2方式に対応。
+管理者から設定を配布する場合はセットアップ URL が使えます:
 
-### ステータス変更
+```
+kotassistant://setup?d=<BASE64(JSON)>
+```
 
-オプション画面 →「Slackステータス更新」で設定。出勤/退勤/休憩中のステータス絵文字・テキストをカスタマイズ可能。
+JSON 形式（旧拡張と同じ）: `{"clientId", "clientSecret", "space", "clockIn", "clockOut", "breakStart", "breakEnd"}`。
+旧拡張の `...#setup=BASE64` 形式の URL や素の base64 を設定画面に貼り付けても取り込めます。
 
-## KING OF TIMEドメイン設定
+## アーキテクチャ
 
-オプション画面でs2/s3/s4サブドメインの切り替え、ユーザー認証/SAML認証の切り替えが可能。
+```
+KOTAssistant/                    アプリ本体（SwiftUI / macOS のみ）
+├── KOTAssistantApp.swift        MenuBarExtra + Settings + 依存コンテナ
+├── Recorder/                    常駐 WKWebView と JS ブリッジ
+│   ├── RecorderWebController    keeper ウィンドウ方式で常時 JS 実行可能
+│   └── Resources/kot_bridge.js  localStorage 読取・打刻検知・プログラム打刻
+├── Intents/                     App Intents（出勤/退勤/休憩/状況）
+├── UI/                          ポップオーバーと設定タブ
+└── Support/                     Keychain・OAuth ループバックサーバ
+
+Packages/KOTCore/                純 Swift パッケージ（Linux でもテスト可能）
+├── KOTCore                      状態エンジン・設定モデル・SetupConfig・PKCE
+└── KOTNotifications             Slack/Google Chat クライアント・OAuth トークン管理・通知ディスパッチャ
+```
+
+設計のポイント:
+
+- **状態導出は Swift 側**: WebView は localStorage（`PARSONAL_BROWSER_RECORDER@SETTING` / `@RECORD_HISTORY_*`）の生 JSON を渡すだけ。打刻状態の判定・ボタン可用性は `RecorderStateEngine` が行い、Linux 上の `swift test` で検証できます
+- **通知経路は一本**: ユーザーのクリックも App Intents のプログラム打刻も同じ実ボタンの click を踏むため、通知の二重送信が起きません
+- **トークンは Keychain**: Slack トークン・OAuth クライアントシークレット・アクセストークン類は UserDefaults に置きません
+- **OAuth はループバック方式**: Google クライアントはカスタム URL スキームを受け付けないため、`127.0.0.1` のワンショットサーバでリダイレクトを受けます。リフレッシュは single-flight・期限 5 分バッファ・401 時 1 回再送（旧拡張と同じ挙動）
+
+### 旧拡張からの設定キー対応
+
+UserDefaults のキー名は chrome.storage.sync のキーを踏襲しています（`slackEnabled` 等）。変更点:
+
+| 旧拡張 | 本アプリ |
+|---|---|
+| `s2Selected` / `s3Selected` / `s4Selected` | `kotDomain` (s2/s3/s4) |
+| `samlSelected` | `kotAuthMode` (account/saml) |
+| `openInNewTab` | 廃止（「ブラウザで開く」ボタンに置換） |
+| `slackToken` ほかトークン類 | Keychain（サービス名 `jp.co.infosign.KOTAssistant`） |
+| `slackWebHooksUrl`（保存）/ `slackWebhooksUrl`（読取）の不一致バグ | `slackWebHooksUrl` に統一して修正 |
+
+## 開発
+
+- CI: Linux で `swift test`、macOS で `xcodegen generate` + `xcodebuild`（`.github/workflows/ci.yml`）
+- コアのテストは `Packages/KOTCore/Tests/` に 57 件（状態エンジン・トークンローテーション・OAuth single-flight・401 リトライ・セットアップ URL マージ等）
+
+### 初回ビルド後のスモークテスト
+
+- [ ] メニューバーのポップオーバーに Myレコーダーが表示され、ログインが永続する
+- [ ] 出勤 → 休始 → 休終 → 退勤 の各打刻でボタンが減光し、アイコンが変化する
+- [ ] 各連携のテスト送信ボタンが成功する
+- [ ] Google「接続」でブラウザ認可 → 接続済みになる
+- [ ] `shortcuts run "打刻状況"` が状態を返す
+- [ ] `shortcuts run "出勤"` で打刻と通知が行われる
 
 ## ライセンス
 
-MIT
-
-## 元リポジトリ
-
-[shoito/kot-chrome-assistant](https://github.com/shoito/kot-chrome-assistant)
+[MIT](LICENSE)

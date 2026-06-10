@@ -1,0 +1,57 @@
+# XcodeGen マニフェスト。`xcodegen generate` で KOTAssistant.xcodeproj を生成する。
+# 生成物（*.xcodeproj, Info.plist, *.entitlements）はコミットしない。
+name: KOTAssistant
+options:
+  bundleIdPrefix: jp.co.infosign
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+
+packages:
+  KOTCore:
+    path: Packages/KOTCore
+
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+
+targets:
+  KOTAssistant:
+    type: application
+    platform: macOS
+    sources:
+      - path: KOTAssistant
+        excludes:
+          - "Recorder/Resources/**"
+          - "Info.plist"
+          - "KOTAssistant.entitlements"
+      - path: KOTAssistant/Recorder/Resources
+        buildPhase: resources
+    dependencies:
+      - package: KOTCore
+        product: KOTCore
+      - package: KOTCore
+        product: KOTNotifications
+    info:
+      path: KOTAssistant/Info.plist
+      properties:
+        CFBundleDisplayName: KOT Assistant
+        LSUIElement: true
+        LSApplicationCategoryType: public.app-category.productivity
+        CFBundleURLTypes:
+          - CFBundleURLName: jp.co.infosign.KOTAssistant
+            CFBundleURLSchemes:
+              - kotassistant
+    entitlements:
+      path: KOTAssistant/KOTAssistant.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+        # OAuth ループバックリダイレクト受信用
+        com.apple.security.network.server: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: jp.co.infosign.KOTAssistant
+        ENABLE_HARDENED_RUNTIME: true
+        GENERATE_INFOPLIST_FILE: false

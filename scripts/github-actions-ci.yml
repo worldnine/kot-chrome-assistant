@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  core-linux:
+    name: コアパッケージ (Linux)
+    runs-on: ubuntu-latest
+    container: swift:6.0-noble
+    steps:
+      - uses: actions/checkout@v4
+      - name: swift test
+        run: swift test --package-path Packages/KOTCore
+
+  app-macos:
+    name: アプリビルド (macOS)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: XcodeGen インストール
+        run: brew install xcodegen
+      - name: プロジェクト生成
+        run: xcodegen generate
+      - name: ビルド
+        run: |
+          xcodebuild -project KOTAssistant.xcodeproj \
+            -scheme KOTAssistant \
+            -destination 'platform=macOS' \
+            build \
+            CODE_SIGNING_ALLOWED=NO
+      - name: パッケージテスト (macOS)
+        run: swift test --package-path Packages/KOTCore
