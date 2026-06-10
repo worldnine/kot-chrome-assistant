@@ -116,8 +116,25 @@ UserDefaults のキー名は chrome.storage.sync のキーを踏襲していま�
 
 ## 開発
 
-- CI: Linux で `swift test`、macOS で `xcodegen generate` + `xcodebuild`（`.github/workflows/ci.yml`）
+- CI 定義は `scripts/github-actions-ci.yml`（Linux で `swift test`、macOS で `xcodegen generate` + `xcodebuild`）。
+  リポジトリ移行後に `.github/workflows/ci.yml` へ移動してください
 - コアのテストは `Packages/KOTCore/Tests/` に 57 件（状態エンジン・トークンローテーション・OAuth single-flight・401 リトライ・セットアップ URL マージ等）
+
+### 新リポジトリへの移行
+
+このブランチはルートが Swift プロジェクトの独立構成なので、そのまま新リポジトリの main にできます:
+
+```bash
+git clone https://github.com/worldnine/kot-chrome-assistant.git kot-macos-assistant
+cd kot-macos-assistant
+git checkout claude/swift-macos-remake-q9kcoj
+git remote set-url origin <新リポジトリのURL>
+git push -u origin claude/swift-macos-remake-q9kcoj:main
+git mv scripts/github-actions-ci.yml .github/workflows/ci.yml  # CI を有効化
+git commit -m "CIワークフローを有効化" && git push
+```
+
+履歴をまっさらにしたい場合は `git checkout --orphan main` で squash してから push してください。
 
 ### 初回ビルド後のスモークテスト
 
