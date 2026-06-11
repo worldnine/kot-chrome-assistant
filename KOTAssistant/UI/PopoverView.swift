@@ -19,9 +19,6 @@ struct PopoverView: View {
         .onAppear {
             model.recorder.refreshIfSettingsChanged()
         }
-        .onDisappear {
-            model.recorder.park()
-        }
     }
 
     private var notLoggedInNotice: some View {
@@ -62,30 +59,39 @@ struct PopoverView: View {
 
 /// 常駐 WKWebView をポップオーバー内に表示するホスト。
 /// 同一インスタンスを keeper ウィンドウと行き来させる（生成し直さない）。
+/// ポップオーバー再表示時に SwiftUI の updateNSView が呼ばれないことがあるため、
+/// ウィンドウへの出入り（viewDidMoveToWindow）を基準に attach / park する。
 struct RecorderWebHostView: NSViewRepresentable {
     let controller: RecorderWebController
 
-    final class Coordinator {
-        let controller: RecorderWebController
+    final class ContainerView: NSView {
+        weak var controller: RecorderWebController?
 
-        init(controller: RecorderWebController) {
-            self.controller = controller
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if window != nil {
+                controller?.attach(to: self)
+            } else {
+                controller?.park()
+            }
         }
     }
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator(controller: controller)
+    func makeNSView(context: Context) -> ContainerView {
+        let view = ContainerView()
+        view.controller = controller
+        return view
     }
 
-    func makeNSView(context: Context) -> NSView {
-        NSView()
+    func updateNSView(_ nsView: ContainerView, context: Context) {
+        nsView.controller = controller
+        if nsView.window != nil {
+            controller.attach(to: nsView)
+        }
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {
-        controller.attach(to: nsView)
-    }
-
-    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
-        coordinator.controller.park()
+    static func dismantleNSView(_ nsView: ContainerView, coordinator: ()) {
+        nsView.controller?.park()
+        nsView.controller = nil
     }
 }
