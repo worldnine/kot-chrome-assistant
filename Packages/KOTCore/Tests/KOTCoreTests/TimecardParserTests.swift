@@ -81,6 +81,22 @@ import Testing
         #expect(state.isClockedIn)
         #expect(state.isClockedOut)
         #expect(!state.onBreak)
+        #expect(state.phase == .finished)
+    }
+
+    @Test func reClockInAfterClockOut() throws {
+        // 退勤 18:00 のあと 19:00 に再出勤 → 最新イベント基準で勤務中
+        let html = timecardHTML(date: "06/11（木）", start: "10:00<br>19:00", end: "18:00")
+        let state = try TimecardParser.state(html: html, dayStamp: day)
+        #expect(state.phase == .working)
+        #expect(state.todayRecords.first == .init(action: .clockIn, timestamp: "20260611190000"))
+    }
+
+    @Test func sameMinuteClockOutAndReClockIn() throws {
+        // タイムカードは分単位。同じ分の退勤と再出勤は勤務中とみなす
+        let html = timecardHTML(date: "06/11（木）", start: "10:00<br>18:00", end: "18:00")
+        let state = try TimecardParser.state(html: html, dayStamp: day)
+        #expect(state.phase == .working)
     }
 
     @Test func noPunchesToday() throws {

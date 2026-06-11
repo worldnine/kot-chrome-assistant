@@ -81,14 +81,11 @@ struct GetPunchStatusIntent: AppIntent {
 
     static func summary(of state: RecorderState) -> String {
         let headline: String
-        if state.onBreak {
-            headline = "休憩中"
-        } else if state.isClockedOut {
-            headline = "退勤済み"
-        } else if state.isClockedIn {
-            headline = "勤務中"
-        } else {
-            headline = "未出勤"
+        switch state.phase {
+        case .notStarted: headline = "未出勤"
+        case .working: headline = "勤務中"
+        case .onBreak: headline = "休憩中"
+        case .finished: headline = "退勤済み"
         }
 
         // 当日履歴は新しい順なので時系列に直して並べる

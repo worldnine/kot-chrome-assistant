@@ -26,6 +26,26 @@ public struct RecorderState: Equatable, Sendable {
         self.onBreak = onBreak
         self.todayRecords = todayRecords
     }
+
+    /// 現在のフェーズ。**最新の打刻イベント**で決まる（退勤後の再出勤も正しく勤務中になる）。
+    /// isClockedIn / isClockedOut は「その打刻が当日存在するか」という生の事実で、
+    /// 現在状態の表示・可否判定にはこちらを使うこと。
+    public var phase: WorkPhase {
+        guard let latest = todayRecords.first else { return .notStarted }
+        switch latest.action {
+        case .clockIn, .breakEnd: return .working
+        case .breakStart: return .onBreak
+        case .clockOut: return .finished
+        }
+    }
+}
+
+/// 当日の勤務フェーズ
+public enum WorkPhase: Equatable, Sendable {
+    case notStarted
+    case working
+    case onBreak
+    case finished
 }
 
 public enum RecorderStateEngine {
@@ -51,18 +71,18 @@ public enum RecorderStateEngine {
         )
     }
 
-    /// ボタンの可用性（原拡張は不可ボタンを opacity 0.3 に減光する）。
-    /// inject.js の減光ロジックの裏返し。
+    /// アクションの可用性（UI ではボタン減光、打刻時は警告の判定に使う）。
+    /// フェーズ基準: 退勤後の再出勤も可。
     public static func isActionAvailable(_ action: PunchAction, state: RecorderState) -> Bool {
-        switch action {
-        case .clockIn:
-            return !state.isClockedIn
-        case .clockOut:
-            return !state.isClockedOut && !state.onBreak
-        case .breakStart:
-            return state.isClockedIn && !state.isClockedOut && !state.onBreak
-        case .breakEnd:
-            return state.onBreak
+        switch (state.phase, action) {
+        case (.notStarted, .clockIn), (.finished, .clockIn):
+            return true
+        case (.working, .clockOut), (.working, .breakStart):
+            return true
+        case (.onBreak, .breakEnd):
+            return true
+        default:
+            return false
         }
     }
 }

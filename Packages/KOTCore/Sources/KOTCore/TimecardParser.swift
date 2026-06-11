@@ -33,8 +33,20 @@ public enum TimecardParser {
         add(.clockOut, clockOuts)
         add(.breakStart, restStarts)
         add(.breakEnd, restEnds)
-        // RecorderState の慣例（新しい順）に合わせる
-        records.sort { $0.timestamp > $1.timestamp }
+        // RecorderState の慣例（新しい順）に合わせる。
+        // タイムカードは分単位なので、同時刻は「退勤 < 休始 < 休終 < 出勤」の順で
+        // 後に起きたとみなす（退勤と再出勤が同じ分でも勤務中と判定されるように）。
+        func tieRank(_ action: PunchAction) -> Int {
+            switch action {
+            case .clockOut: return 0
+            case .breakStart: return 1
+            case .breakEnd: return 2
+            case .clockIn: return 3
+            }
+        }
+        records.sort {
+            ($0.timestamp, tieRank($0.action)) > ($1.timestamp, tieRank($1.action))
+        }
 
         return RecorderState(
             isClockedIn: !clockIns.isEmpty,

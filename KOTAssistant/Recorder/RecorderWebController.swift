@@ -132,10 +132,12 @@ final class RecorderWebController {
 
     var menuBarSymbol: String {
         guard status == .ready, let state else { return "deskclock" }
-        if state.onBreak { return "cup.and.saucer.fill" }
-        if state.isClockedOut { return "moon.zzz.fill" }
-        if state.isClockedIn { return "deskclock.fill" }
-        return "deskclock"
+        switch state.phase {
+        case .notStarted: return "deskclock"
+        case .working: return "deskclock.fill"
+        case .onBreak: return "cup.and.saucer.fill"
+        case .finished: return "moon.zzz.fill"
+        }
     }
 
     var statusDescription: String {
@@ -144,10 +146,12 @@ final class RecorderWebController {
         case .notLoggedIn: return "未ログイン"
         case .ready:
             guard let state else { return "状態不明" }
-            if state.onBreak { return "休憩中" }
-            if state.isClockedOut { return "退勤済み" }
-            if state.isClockedIn { return "勤務中" }
-            return "未出勤"
+            switch state.phase {
+            case .notStarted: return "未出勤"
+            case .working: return "勤務中"
+            case .onBreak: return "休憩中"
+            case .finished: return "退勤済み"
+            }
         }
     }
 

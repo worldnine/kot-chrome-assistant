@@ -60,8 +60,9 @@ import Testing
 
     @Test func availabilityBeforeClockIn() {
         let state = RecorderStateEngine.state(history: [], today: today)
+        #expect(state.phase == .notStarted)
         #expect(RecorderStateEngine.isActionAvailable(.clockIn, state: state))
-        #expect(RecorderStateEngine.isActionAvailable(.clockOut, state: state))
+        #expect(!RecorderStateEngine.isActionAvailable(.clockOut, state: state))
         #expect(!RecorderStateEngine.isActionAvailable(.breakStart, state: state))
         #expect(!RecorderStateEngine.isActionAvailable(.breakEnd, state: state))
     }
@@ -91,10 +92,28 @@ import Testing
             history: [entry("退勤", "20260610180000"), entry("出勤", "20260610090000")],
             today: today
         )
-        #expect(!RecorderStateEngine.isActionAvailable(.clockIn, state: state))
+        #expect(state.phase == .finished)
+        // 退勤後の再出勤は可能
+        #expect(RecorderStateEngine.isActionAvailable(.clockIn, state: state))
         #expect(!RecorderStateEngine.isActionAvailable(.clockOut, state: state))
         #expect(!RecorderStateEngine.isActionAvailable(.breakStart, state: state))
         #expect(!RecorderStateEngine.isActionAvailable(.breakEnd, state: state))
+    }
+
+    @Test func reClockInAfterClockOutIsWorking() {
+        // 退勤 → 再出勤: 最新イベントで判定するので勤務中に戻る
+        let state = RecorderStateEngine.state(
+            history: [
+                entry("出勤", "20260610190000"),
+                entry("退勤", "20260610180000"),
+                entry("出勤", "20260610090000"),
+            ],
+            today: today
+        )
+        #expect(state.phase == .working)
+        #expect(RecorderStateEngine.isActionAvailable(.clockOut, state: state))
+        #expect(RecorderStateEngine.isActionAvailable(.breakStart, state: state))
+        #expect(!RecorderStateEngine.isActionAvailable(.clockIn, state: state))
     }
 
     @Test func dayStampFormatting() {
