@@ -11,8 +11,7 @@ struct GoogleLoopbackAuthorizer: GoogleInteractiveAuthorizer {
     var timeout: Duration = .seconds(300)
 
     func authorize(clientID: String, clientSecret: String) async throws -> OAuthTokenResponse {
-        let server = try LoopbackRedirectServer()
-        let port = try await server.start()
+        let (server, port) = try await LoopbackRedirectServer.startPreferringFixedPort()
         let redirectURI = "http://127.0.0.1:\(port)"
         let pkce = PKCE()
         let url = GoogleOAuthService.authorizationURL(clientID: clientID, redirectURI: redirectURI, pkce: pkce)

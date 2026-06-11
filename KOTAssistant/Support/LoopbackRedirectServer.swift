@@ -19,16 +19,39 @@ final class LoopbackRedirectServer: @unchecked Sendable {
         }
     }
 
+    /// 既定の待ち受けポート。
+    /// 「ウェブアプリケーション」タイプの OAuth クライアントはリダイレクト URI が
+    /// ポート込みで完全一致する必要があるため、登録可能な固定ポートを優先する
+    /// （クライアント側には http://127.0.0.1:51789 を登録してもらう）。
+    static let preferredPort: UInt16 = 51789
+
     private let listener: NWListener
     private let queue = DispatchQueue(label: "jp.co.infosign.KOTAssistant.loopback")
     private let lock = NSLock()
     private var readyContinuation: CheckedContinuation<UInt16, Error>?
     private var codeContinuation: CheckedContinuation<String, Error>?
 
-    init() throws {
+    init(fixedPort: UInt16? = nil) throws {
         let parameters = NWParameters.tcp
         parameters.requiredInterfaceType = .loopback
-        listener = try NWListener(using: parameters)
+        parameters.allowLocalEndpointReuse = true
+        if let fixedPort, let port = NWEndpoint.Port(rawValue: fixedPort) {
+            listener = try NWListener(using: parameters, on: port)
+        } else {
+            listener = try NWListener(using: parameters)
+        }
+    }
+
+    /// 固定ポートで待ち受けを試み、使用中なら空きポートにフォールバックして
+    /// 開始済みのサーバを返す。
+    static func startPreferringFixedPort() async throws -> (server: LoopbackRedirectServer, port: UInt16) {
+        if let fixed = try? LoopbackRedirectServer(fixedPort: preferredPort),
+           let port = try? await fixed.start() {
+            return (fixed, port)
+        }
+        let fallback = try LoopbackRedirectServer()
+        let port = try await fallback.start()
+        return (fallback, port)
     }
 
     /// リッスン開始してポート番号を返す

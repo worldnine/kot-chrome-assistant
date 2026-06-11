@@ -63,7 +63,9 @@ alias dako='shortcuts run'
 
 ### Google Chat ユーザー認証のセットアップ
 
-1. Google Cloud Console で OAuth クライアントを作成（**デスクトップアプリ**タイプ推奨。ループバックリダイレクト `http://127.0.0.1` を使用します）
+1. Google Cloud Console で OAuth クライアントを用意。タイプにより設定が異なります:
+   - **デスクトップアプリ**タイプ（新規作成ならこちら推奨）: 追加設定不要。ループバックリダイレクトが任意ポートで許可されます
+   - **ウェブアプリケーション**タイプ（旧 Chrome 拡張のクライアントを流用する場合）: 「承認済みのリダイレクト URI」に `http://127.0.0.1:51789` を追加してください。未登録だと `エラー 400: redirect_uri_mismatch` になります
 2. Google Chat API を有効化（スコープ `chat.messages.create`）
 3. 設定画面に Client ID / Client Secret / スペース ID を入力して「Google に接続」
 
