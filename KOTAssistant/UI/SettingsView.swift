@@ -1,6 +1,7 @@
 import SwiftUI
 
 /// 設定ウィンドウ。macOS の流儀に合わせ、保存ボタンなしの即時反映。
+/// ウィンドウは固定サイズで、各タブのフォームがスクロールする（System Settings と同じ）。
 struct SettingsView: View {
     let model: AppModel
 
@@ -13,7 +14,34 @@ struct SettingsView: View {
             GChatTab(model: model)
                 .tabItem { Label("Google Chat", systemImage: "bubble.left") }
         }
-        .frame(width: 640)
+        .frame(width: 700, height: 580)
+    }
+}
+
+/// 機能の有効/無効を切り替えるヘッダ行（System Settings の機能ページの形）。
+/// タイトル・説明・大きめのスイッチで、ON/OFF がひと目でわかるようにする。
+struct FeatureToggleRow: View {
+    let title: String
+    let description: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.headline)
+                Text(description)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+            Toggle(title, isOn: $isOn)
+                .toggleStyle(.switch)
+                .controlSize(.large)
+                .labelsHidden()
+        }
+        .padding(.vertical, 4)
     }
 }
 

@@ -27,12 +27,11 @@ struct GChatTab: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Webhook 通知", isOn: $form.webhook.enabled)
-            } footer: {
-                Text("スペースの Incoming Webhook へボット名義で投稿します。URL はスペース区切りで複数指定できます。")
-            }
-
-            Section {
+                FeatureToggleRow(
+                    title: "Webhook 通知",
+                    description: "スペースの Incoming Webhook へボット名義で投稿します。URL はスペース区切りで複数指定できます。",
+                    isOn: $form.webhook.enabled
+                )
                 TextField("Webhook URL", text: $form.webhookURLs)
                 MessageFields(
                     clockIn: $form.webhook.clockInMessage,
@@ -45,15 +44,13 @@ struct GChatTab: View {
                     ResultText(text: webhookResult, isError: webhookIsError)
                 }
             }
-            .disabled(!form.webhook.enabled)
 
             Section {
-                Toggle("ユーザー認証投稿", isOn: $form.user.enabled)
-            } footer: {
-                Text("OAuth で接続し、自分のアイコン・名前で投稿します。スペース ID は spaces/XXXX・素の ID・チャット URL のいずれの形式でも、スペース区切りで複数指定できます。")
-            }
-
-            Section {
+                FeatureToggleRow(
+                    title: "ユーザー認証投稿",
+                    description: "OAuth で接続し、自分のアイコン・名前で投稿します。スペース ID は spaces/XXXX・素の ID・チャット URL のいずれの形式でも、スペース区切りで複数指定できます。",
+                    isOn: $form.user.enabled
+                )
                 TextField("OAuth Client ID", text: $form.user.oauthClientID)
                 SecureField("OAuth Client Secret", text: $form.clientSecret)
                 TextField("スペース ID", text: $form.spaces, prompt: Text("spaces/AAAA または チャット URL"))
@@ -92,7 +89,6 @@ struct GChatTab: View {
                     ResultText(text: userResult, isError: userIsError)
                 }
             }
-            .disabled(!form.user.enabled)
 
             Section("セットアップ URL の取り込み") {
                 TextField("セットアップ URL または base64 コード", text: $setupInput)

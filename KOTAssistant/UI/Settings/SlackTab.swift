@@ -25,12 +25,11 @@ struct SlackTab: View {
     var body: some View {
         Form {
             Section {
-                Toggle("メッセージ通知", isOn: $form.message.enabled)
-            } footer: {
-                Text("打刻時に Slack チャンネルへメッセージを投稿します。チャンネル・トークン・Webhook URL はスペース区切りで複数指定できます。")
-            }
-
-            Section {
+                FeatureToggleRow(
+                    title: "メッセージ通知",
+                    description: "打刻時に Slack チャンネルへメッセージを投稿します。チャンネル・トークン・Webhook URL はスペース区切りで複数指定できます。",
+                    isOn: $form.message.enabled
+                )
                 TextField("チャンネル", text: $form.channels, prompt: Text("#kintai #general"))
                 Picker("投稿方法", selection: $form.message.apiType) {
                     Text("ユーザーとして投稿（OAuth トークン）").tag(SlackMessageSettings.APIType.asUser)
@@ -42,7 +41,6 @@ struct SlackTab: View {
                     TextField("Webhook URL（チャンネルと同順）", text: $form.webhookURLs)
                 }
             }
-            .disabled(!form.message.enabled)
 
             Section {
                 MessageFields(
@@ -60,15 +58,13 @@ struct SlackTab: View {
             } footer: {
                 Text("空欄のアクションは通知されません。")
             }
-            .disabled(!form.message.enabled)
 
             Section {
-                Toggle("ステータス更新", isOn: $form.status.enabled)
-            } footer: {
-                Text("打刻に合わせて Slack のステータス絵文字とテキストを変更します。休憩終了時は出勤時のステータスに戻ります。")
-            }
-
-            Section {
+                FeatureToggleRow(
+                    title: "ステータス更新",
+                    description: "打刻に合わせて Slack のステータス絵文字とテキストを変更します。休憩終了時は出勤時のステータスに戻ります。",
+                    isOn: $form.status.enabled
+                )
                 SecureField("OAuth トークン", text: $form.statusToken)
                 LabeledContent("出勤") {
                     statusFields(emoji: $form.status.clockIn.emoji, text: $form.status.clockIn.text,
@@ -87,7 +83,6 @@ struct SlackTab: View {
                     ResultText(text: statusResult, isError: statusIsError)
                 }
             }
-            .disabled(!form.status.enabled)
         }
         .formStyle(.grouped)
         .onAppear { load() }
