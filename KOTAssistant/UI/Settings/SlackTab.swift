@@ -2,92 +2,168 @@ import KOTCore
 import KOTNotifications
 import SwiftUI
 
+/// Slack 連携（メッセージ通知＋ステータス更新）。変更は即時保存。
 struct SlackTab: View {
     let model: AppModel
 
-    @State private var settings = SlackMessageSettings()
-    @State private var channels = ""
-    @State private var webhookURLs = ""
-    @State private var token = ""
-    @State private var result = ""
-    @State private var isError = false
+    @State private var form = FormState()
+    @State private var loaded = false
+    @State private var messageResult = ""
+    @State private var messageIsError = false
+    @State private var statusResult = ""
+    @State private var statusIsError = false
+
+    struct FormState: Equatable {
+        var message = SlackMessageSettings()
+        var status = SlackStatusSettings()
+        var channels = ""
+        var webhookURLs = ""
+        var messageToken = ""
+        var statusToken = ""
+    }
 
     var body: some View {
         Form {
             Section {
-                Toggle("Slack メッセージ通知を有効にする", isOn: $settings.enabled)
-                TextField("チャンネル（スペース区切りで複数可）", text: $channels, prompt: Text("#kintai #general"))
-                Picker("投稿方法", selection: $settings.apiType) {
-                    Text("ユーザーとして投稿（OAuth トークン）").tag(SlackMessageSettings.APIType.asUser)
-                    Text("Incoming Webhooks").tag(SlackMessageSettings.APIType.incomingWebhook)
-                }
-                if settings.apiType == .asUser {
-                    SecureField("OAuth トークン（スペース区切りで複数可）", text: $token)
-                } else {
-                    TextField("Webhook URL（スペース区切り・チャンネルと同順）", text: $webhookURLs)
-                }
-            }
-
-            Section("メッセージ（空欄のアクションは通知されません）") {
-                TextField("出勤", text: $settings.clockInMessage)
-                TextField("退勤", text: $settings.clockOutMessage)
-                TextField("休憩開始", text: $settings.breakStartMessage)
-                TextField("休憩終了", text: $settings.breakEndMessage)
+                Toggle("メッセージ通知", isOn: $form.message.enabled)
+            } footer: {
+                Text("打刻時に Slack チャンネルへメッセージを投稿します。チャンネル・トークン・Webhook URL はスペース区切りで複数指定できます。")
             }
 
             Section {
-                HStack {
-                    Button("保存") { save() }
-                    Button("テスト送信") { Task { await test() } }
-                    ResultText(text: result, isError: isError)
+                TextField("チャンネル", text: $form.channels, prompt: Text("#kintai #general"))
+                Picker("投稿方法", selection: $form.message.apiType) {
+                    Text("ユーザーとして投稿（OAuth トークン）").tag(SlackMessageSettings.APIType.asUser)
+                    Text("Incoming Webhooks").tag(SlackMessageSettings.APIType.incomingWebhook)
+                }
+                if form.message.apiType == .asUser {
+                    SecureField("OAuth トークン", text: $form.messageToken)
+                } else {
+                    TextField("Webhook URL（チャンネルと同順）", text: $form.webhookURLs)
                 }
             }
+            .disabled(!form.message.enabled)
+
+            Section {
+                MessageFields(
+                    clockIn: $form.message.clockInMessage,
+                    clockOut: $form.message.clockOutMessage,
+                    breakStart: $form.message.breakStartMessage,
+                    breakEnd: $form.message.breakEndMessage
+                )
+                HStack {
+                    Button("テスト送信") { Task { await testMessage() } }
+                    ResultText(text: messageResult, isError: messageIsError)
+                }
+            } header: {
+                Text("メッセージ内容")
+            } footer: {
+                Text("空欄のアクションは通知されません。")
+            }
+            .disabled(!form.message.enabled)
+
+            Section {
+                Toggle("ステータス更新", isOn: $form.status.enabled)
+            } footer: {
+                Text("打刻に合わせて Slack のステータス絵文字とテキストを変更します。休憩終了時は出勤時のステータスに戻ります。")
+            }
+
+            Section {
+                SecureField("OAuth トークン", text: $form.statusToken)
+                LabeledContent("出勤") {
+                    statusFields(emoji: $form.status.clockIn.emoji, text: $form.status.clockIn.text,
+                                 emojiPrompt: ":office:", textPrompt: "仕事中")
+                }
+                LabeledContent("退勤") {
+                    statusFields(emoji: $form.status.clockOut.emoji, text: $form.status.clockOut.text,
+                                 emojiPrompt: ":house:", textPrompt: "退勤しました")
+                }
+                LabeledContent("休憩中") {
+                    statusFields(emoji: $form.status.breakStart.emoji, text: $form.status.breakStart.text,
+                                 emojiPrompt: ":coffee:", textPrompt: "休憩中")
+                }
+                HStack {
+                    Button("テスト送信") { Task { await testStatus() } }
+                    ResultText(text: statusResult, isError: statusIsError)
+                }
+            }
+            .disabled(!form.status.enabled)
         }
         .formStyle(.grouped)
         .onAppear { load() }
+        .onChange(of: form) { save() }
+    }
+
+    private func statusFields(
+        emoji: Binding<String>, text: Binding<String>,
+        emojiPrompt: String, textPrompt: String
+    ) -> some View {
+        HStack {
+            TextField("絵文字", text: emoji, prompt: Text(emojiPrompt))
+                .frame(width: 120)
+            TextField("テキスト", text: text, prompt: Text(textPrompt))
+        }
     }
 
     private func load() {
-        settings = model.settingsStore.load().slackMessage
-        channels = SpaceDelimited.toText(settings.channels)
-        webhookURLs = SpaceDelimited.toText(settings.webhookURLs)
-        token = model.secret(.slackToken)
-    }
-
-    private func currentSettings() -> SlackMessageSettings {
-        var current = settings
-        current.channels = SpaceDelimited.toList(channels)
-        current.webhookURLs = SpaceDelimited.toList(webhookURLs)
-        return current
+        let settings = model.settingsStore.load()
+        form.message = settings.slackMessage
+        form.status = settings.slackStatus
+        form.channels = SpaceDelimited.toText(settings.slackMessage.channels)
+        form.webhookURLs = SpaceDelimited.toText(settings.slackMessage.webhookURLs)
+        form.messageToken = model.secret(.slackToken)
+        form.statusToken = model.secret(.slackStatusToken)
+        loaded = true
     }
 
     private func save() {
-        var all = model.settingsStore.load()
-        all.slackMessage = currentSettings()
-        model.settingsStore.save(all)
-        model.setSecret(token, for: .slackToken)
-        result = "保存しました"
-        isError = false
+        guard loaded else { return }
+        var settings = model.settingsStore.load()
+        var message = form.message
+        message.channels = SpaceDelimited.toList(form.channels)
+        message.webhookURLs = SpaceDelimited.toList(form.webhookURLs)
+        settings.slackMessage = message
+        settings.slackStatus = form.status
+        model.settingsStore.save(settings)
+        model.setSecret(form.messageToken, for: .slackToken)
+        model.setSecret(form.statusToken, for: .slackStatusToken)
     }
 
-    private func test() async {
-        let current = currentSettings()
+    private func testMessage() async {
+        var current = form.message
+        current.channels = SpaceDelimited.toList(form.channels)
+        current.webhookURLs = SpaceDelimited.toList(form.webhookURLs)
         let text = current.clockInMessage.isEmpty ? "テスト" : current.clockInMessage
         let client = SlackMessageClient(transport: model.transport)
-        let results = await client.post(text: text, settings: current, tokens: SpaceDelimited.toList(token))
-        showResults(results)
+        let results = await client.post(text: text, settings: current, tokens: SpaceDelimited.toList(form.messageToken))
+        if let failure = results.first(where: { !$0.success }) {
+            messageResult = "失敗 (\(failure.destination)): \(failure.detail ?? "")"
+            messageIsError = true
+        } else if results.isEmpty {
+            messageResult = "送信先がありません"
+            messageIsError = true
+        } else {
+            messageResult = "送信しました"
+            messageIsError = false
+        }
     }
 
-    private func showResults(_ results: [DeliveryResult]) {
+    private func testStatus() async {
+        let status = SlackStatusSettings.Status(
+            emoji: form.status.clockIn.emoji.isEmpty ? ":office:" : form.status.clockIn.emoji,
+            text: form.status.clockIn.text.isEmpty ? "仕事中" : form.status.clockIn.text
+        )
+        let client = SlackStatusClient(transport: model.transport)
+        let results = await client.setStatus(status, tokens: SpaceDelimited.toList(form.statusToken))
         if let failure = results.first(where: { !$0.success }) {
-            result = "失敗 (\(failure.destination)): \(failure.detail ?? "")"
-            isError = true
+            statusResult = "失敗: \(failure.detail ?? "")"
+            statusIsError = true
         } else if results.isEmpty {
-            result = "送信先がありません"
-            isError = true
+            statusResult = "トークンが未設定です"
+            statusIsError = true
         } else {
-            result = "送信しました"
-            isError = false
+            statusResult = "ステータスを更新しました"
+            statusIsError = false
         }
     }
 }

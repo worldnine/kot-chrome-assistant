@@ -1,5 +1,6 @@
 import SwiftUI
 
+/// 設定ウィンドウ。macOS の流儀に合わせ、保存ボタンなしの即時反映。
 struct SettingsView: View {
     let model: AppModel
 
@@ -8,16 +9,11 @@ struct SettingsView: View {
             GeneralTab(model: model)
                 .tabItem { Label("全般", systemImage: "gearshape") }
             SlackTab(model: model)
-                .tabItem { Label("Slack 通知", systemImage: "message") }
-            SlackStatusTab(model: model)
-                .tabItem { Label("Slack ステータス", systemImage: "face.smiling") }
-            GChatWebhookTab(model: model)
+                .tabItem { Label("Slack", systemImage: "message") }
+            GChatTab(model: model)
                 .tabItem { Label("Google Chat", systemImage: "bubble.left") }
-            GChatUserTab(model: model)
-                .tabItem { Label("Google Chat (ユーザー)", systemImage: "person.crop.circle.badge.checkmark") }
         }
-        .frame(width: 600)
-        .padding(.bottom, 8)
+        .frame(width: 640)
     }
 }
 
@@ -42,5 +38,20 @@ struct ResultText: View {
             .font(.callout)
             .foregroundStyle(isError ? .red : .secondary)
             .lineLimit(2)
+    }
+}
+
+/// 打刻アクションごとのメッセージ入力（各連携で共通のパターン）
+struct MessageFields: View {
+    @Binding var clockIn: String
+    @Binding var clockOut: String
+    @Binding var breakStart: String
+    @Binding var breakEnd: String
+
+    var body: some View {
+        TextField("出勤", text: $clockIn)
+        TextField("退勤", text: $clockOut)
+        TextField("休憩開始", text: $breakStart)
+        TextField("休憩終了", text: $breakEnd)
     }
 }
