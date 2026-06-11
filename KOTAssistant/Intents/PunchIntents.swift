@@ -5,7 +5,10 @@ import KOTCore
 /// 打刻インテント共通処理
 @MainActor
 private func performPunch(_ action: PunchAction, recorder: RecorderWebController) async throws -> IntentDialog {
-    _ = try await recorder.punch(action)
+    let outcome = try await recorder.punch(action)
+    if outcome.stateMismatch {
+        return IntentDialog("\(action.displayName)を打刻しました（想定外の順序です。タイムカードを確認してください）")
+    }
     return IntentDialog("\(action.displayName)を打刻しました")
 }
 
@@ -65,8 +68,14 @@ struct GetPunchStatusIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
-        let state = try await recorder.currentState()
-        let summary = Self.summary(of: state)
+        // タイムカード（サーバー正データ）優先。取れない場合はアプリ検知分にフォールバック
+        let summary: String
+        if let serverState = try? await recorder.refreshServerState() {
+            summary = Self.summary(of: serverState)
+        } else {
+            let localState = try await recorder.currentState()
+            summary = Self.summary(of: localState) + "※アプリ経由の打刻のみ"
+        }
         return .result(value: summary, dialog: IntentDialog("\(summary)"))
     }
 

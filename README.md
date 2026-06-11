@@ -110,7 +110,9 @@ Packages/KOTCore/                純 Swift パッケージ（Linux でもテス�
 
 設計のポイント:
 
-- **状態導出は Swift 側**: WebView は localStorage（`PARSONAL_BROWSER_RECORDER@SETTING` / `@RECORD_HISTORY_*`）の生 JSON を渡すだけ。打刻状態の判定・ボタン可用性は `RecorderStateEngine` が行い、Linux 上の `swift test` で検証できます
+- **打刻状態は 2 層**: 即時の打刻検知は localStorage 履歴（このアプリ経由の打刻のみ）、正確な状態は**タイムカード照会**で取得します。レコーダーの SETTING にある `token_f` でゲートウェイ（`/gateway/bprgateway`）からタイムカード画面のワンタイム URL を発行し、同一オリジン fetch で取得した HTML の当日行（出勤/退勤/休憩開始/休憩終了）を `TimecardParser` が解析します。タイムカードはサーバー側の正データなので **IC カードやスマホなど他経路の打刻も反映**されます（ポップオーバー表示時と「打刻状況」インテントで照会。`show_timecard_flag=1` かつパスワード保護なしの環境が前提）
+- **打刻ガードは警告のみ**: 即時状態は不正確になりうるため、想定外の順序の打刻もブロックせず警告つきで実行します（旧拡張のボタン減光と同じ思想）
+- **状態導出は Swift 側**: WebView は localStorage（`PARSONAL_BROWSER_RECORDER@SETTING` / `@RECORD_HISTORY_*`）の生 JSON やタイムカード HTML を渡すだけ。判定ロジックは `RecorderStateEngine` / `TimecardParser` にあり、Linux 上の `swift test` で検証できます
 - **通知経路は一本**: ユーザーのクリックも App Intents のプログラム打刻も同じ実ボタンの click を踏むため、通知の二重送信が起きません
 - **トークンは Keychain**: Slack トークン・OAuth クライアントシークレット・アクセストークン類は UserDefaults に置きません
 - **OAuth はループバック方式**: Google クライアントはカスタム URL スキームを受け付けないため、`127.0.0.1` のワンショットサーバでリダイレクトを受けます。リフレッシュは single-flight・期限 5 分バッファ・401 時 1 回再送（旧拡張と同じ挙動）

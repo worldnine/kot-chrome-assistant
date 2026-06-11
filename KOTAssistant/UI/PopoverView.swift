@@ -18,6 +18,8 @@ struct PopoverView: View {
         }
         .onAppear {
             model.recorder.refreshIfSettingsChanged()
+            // 表示のたびにタイムカード（サーバー正データ）で状態を更新
+            Task { try? await model.recorder.refreshServerState() }
         }
     }
 

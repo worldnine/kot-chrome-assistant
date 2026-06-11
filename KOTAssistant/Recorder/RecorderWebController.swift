@@ -7,22 +7,31 @@ import WebKit
 
 enum PunchError: Error, CustomLocalizedStringResourceConvertible {
     case notLoggedIn
-    case actionUnavailable(PunchAction)
     case bridgeTimeout
     case buttonNotFound
+    case timecardUnavailable
 
     var localizedStringResource: LocalizedStringResource {
         switch self {
         case .notLoggedIn:
             return "KING OF TIME にログインしていません。メニューバーから Myレコーダーを開いてログインしてください。"
-        case .actionUnavailable(let action):
-            return "現在「\(action.displayName)」は打刻できない状態です。"
         case .bridgeTimeout:
             return "Myレコーダーの読み込みがタイムアウトしました。"
         case .buttonNotFound:
             return "打刻ボタンが見つかりませんでした。"
+        case .timecardUnavailable:
+            return "タイムカードの照会に失敗しました。"
         }
     }
+}
+
+/// 打刻実行の結果
+struct PunchOutcome {
+    let state: RecorderState
+    /// アプリが把握していた状態と矛盾する打刻だったか。
+    /// 状態はこのアプリ経由の打刻しか反映しないため、IC カードやスマホ等の
+    /// 外部打刻があると食い違う。ブロックせず警告として扱う。
+    let stateMismatch: Bool
 }
 
 /// 常駐 WKWebView の所有者。
@@ -166,25 +175,44 @@ final class RecorderWebController {
 
     // MARK: - 打刻（App Intents / UI から）
 
-    func punch(_ action: PunchAction) async throws -> RecorderState {
+    func punch(_ action: PunchAction) async throws -> PunchOutcome {
         try await ensureReady()
         guard let current = state else { throw PunchError.bridgeTimeout }
-        guard RecorderStateEngine.isActionAvailable(action, state: current) else {
-            throw PunchError.actionUnavailable(action)
-        }
+        // 状態と矛盾していてもブロックしない（外部打刻があると状態は不正確なため）
+        let mismatch = !RecorderStateEngine.isActionAvailable(action, state: current)
         let clicked = try await evaluateBool("window.__kotPunch('\(action.rawValue)')")
         guard clicked else { throw PunchError.buttonNotFound }
         // ブリッジが打刻後に状態を再送してくる
         await waitForStateUpdate(timeout: .seconds(5))
-        return state ?? current
+        // サーバー反映後にタイムカード基準へ更新（fire-and-forget）
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            _ = try? await self?.refreshServerState()
+        }
+        return PunchOutcome(state: state ?? current, stateMismatch: mismatch)
     }
 
+    /// このアプリが検知した範囲の状態（localStorage 履歴ベース）
     func currentState() async throws -> RecorderState {
         try await ensureReady()
         try? await evaluate("window.__kotReadState()")
         await waitForStateUpdate(timeout: .seconds(3))
         guard status == .ready, let state else { throw PunchError.notLoggedIn }
         return state
+    }
+
+    /// タイムカード（サーバー側の正データ）から今日の状態を取得する。
+    /// IC カードやスマホなど他経路の打刻も反映される。
+    /// 取得できたらアプリの表示状態もこれで上書きする。
+    @discardableResult
+    func refreshServerState() async throws -> RecorderState {
+        try await ensureReady()
+        let result = try await callAsyncJS("return await window.__kotFetchTimecardHTML();")
+        guard let html = result as? String else { throw PunchError.timecardUnavailable }
+        let serverState = try TimecardParser.state(html: html, dayStamp: RecorderStateEngine.dayStamp())
+        state = serverState
+        updateButtonDimming(for: serverState)
+        return serverState
     }
 
     private func ensureReady() async throws {
@@ -306,5 +334,19 @@ final class RecorderWebController {
         if let bool = result as? Bool { return bool }
         if let number = result as? NSNumber { return number.boolValue }
         return false
+    }
+
+    /// async 関数の実行（Promise の解決を待つ）
+    private func callAsyncJS(_ functionBody: String) async throws -> Any? {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Any?, Error>) in
+            webView.callAsyncJavaScript(functionBody, arguments: [:], in: nil, in: .page) { result in
+                switch result {
+                case .success(let value):
+                    continuation.resume(returning: value)
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
     }
 }

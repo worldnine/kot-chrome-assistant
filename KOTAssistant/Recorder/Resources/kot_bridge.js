@@ -72,6 +72,53 @@
     if (el) el.style.opacity = dimmed ? 0.3 : '';
   };
 
+  // タイムカード画面の HTML を取得する（状態照会用）。
+  // SETTING の token_f でゲートウェイからワンタイム URL を発行し、
+  // meta refresh を 1 段辿って本体 HTML を返す。すべて同一オリジンの fetch。
+  // 解析は Swift 側（TimecardParser）で行う。
+  window.__kotFetchTimecardHTML = async () => {
+    const settingItem = localStorage.getItem(SETTING_KEY);
+    if (!settingItem) return null;
+    let setting;
+    try {
+      setting = JSON.parse(settingItem);
+    } catch (e) {
+      return null;
+    }
+    const tokenF = setting.token && setting.token.token_f;
+    const tr = setting.timerecorder || {};
+    if (!tokenF || tr.show_timecard_flag !== '1') return null;
+    // パスワード保護環境（need_password=1）は input_hash の計算が必要なため未対応
+    if (tr.need_password === '1') return null;
+
+    const pad = (n) => String(n).padStart(2, '0');
+    const now = new Date();
+    const ts =
+      '' + now.getFullYear() + pad(now.getMonth() + 1) + pad(now.getDate()) +
+      pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds());
+    const body = new URLSearchParams({
+      token: tokenF,
+      user_token: setting.user.user_token,
+      input_hash: '',
+      timestamp: ts,
+      version: '1.4.26',
+    });
+    const gw = await fetch('/gateway/bprgateway', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    });
+    const issued = await gw.json();
+    if (!issued || issued.result === 'NG' || !issued.location) return null;
+
+    const entry = await fetch('/' + issued.location + issued.params);
+    const entryHtml = await entry.text();
+    const m = entryHtml.match(/URL=([^"]+)"/);
+    if (!m) return entryHtml;
+    const page = await fetch(m[1]);
+    return await page.text();
+  };
+
   // ボタンの出現を最大 3 秒待ってリスナを張る（原拡張と同じポーリング）
   const installListeners = () => {
     const ids = resolveButtonIds();
